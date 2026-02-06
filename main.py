@@ -3,7 +3,7 @@ import re
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 # ===== TELETHON CONFIG =====
 API_ID = 36295148
@@ -21,51 +21,44 @@ tele_client = TelegramClient(
     API_HASH
 )
 
-# ===== BOT CONFIG =====
-BOT_TOKEN = "8257314385:AAF1Fu0xaaXKZB-jZnn4e1og4fX8RSjLkmM"
+# ===== TELEGRAM BOT CONFIG =====
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
 # ===== TELETHON LISTENER =====
 @tele_client.on(events.NewMessage(from_users=TARGET_BOT))
 async def handle_target_response(event):
-    print("📩 RAW RESPONSE:", event.text)
+    print("📩 RAW:", event.text)
 
     match = re.search(r"CMD:\s*(.+)", event.text or "")
     if match:
-        final_cmd = match.group(1)
-
-        print("✅ FINAL COMMAND:", final_cmd)
+        cmd = match.group(1)
+        print("✅ FINAL CMD:", cmd)
 
         with open("output.txt", "w") as f:
-            f.write(final_cmd)
+            f.write(cmd)
 
 # ===== BOT COMMAND =====
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 Processing…")
+    await update.message.reply_text("🚀 Working...")
 
     if not tele_client.is_connected():
         await tele_client.connect()
 
     await tele_client.send_message(TARGET_BOT, "/start")
     await asyncio.sleep(2)
+    await tele_client.send_message(TARGET_BOT, "/status https://t.me/examplegroup")
 
-    await tele_client.send_message(
-        TARGET_BOT,
-        "/status https://t.me/examplegroup"
-    )
+    await update.message.reply_text("📤 Sent. Waiting for response.")
 
-    await update.message.reply_text("📤 Command sent, waiting for response…")
+# ===== MAIN ASYNC RUNNER =====
+async def main():
+    await tele_client.start()
 
-# ===== MAIN =====
-def main():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(tele_client.connect())
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
 
-    print("🤖 Bot + Telethon running (HARDCODED STRING SESSION)")
-    app.run_polling()
+    print("🤖 Bot running (Python 3.13 SAFE)")
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
