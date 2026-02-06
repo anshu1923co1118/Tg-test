@@ -138,20 +138,20 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------------- MAIN ----------------
 async def main():
+    # Start Telethon
     await tele.start()
     print("🧵 Telethon connected")
 
+    # Telegram bot
     app = Application.builder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("setlinkchatid", setlink))
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
 
     print("🤖 Control bot running")
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    await asyncio.Event().wait()
 
-
+    # ✅ ONE polling instance ONLY
+    await app.run_polling(close_loop=False)
 if __name__ == "__main__":
     asyncio.run(main())
