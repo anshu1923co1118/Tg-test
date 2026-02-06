@@ -22,7 +22,7 @@ tele_client = TelegramClient(
 )
 
 # ===== TELEGRAM BOT CONFIG =====
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = "8257314385:AAF1Fu0xaaXKZB-jZnn4e1og4fX8RSjLkmM"
 
 # ===== TELETHON LISTENER =====
 @tele_client.on(events.NewMessage(from_users=TARGET_BOT))
