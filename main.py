@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 API_ID = 36295148
 API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
-BOT_TOKEN = "8257314385:AAF1Fu0xaaXKZB-jZnn4e1og4fX8RSjLkmM"
+BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # TASK EXECUTER BOT
