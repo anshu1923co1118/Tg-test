@@ -101,8 +101,7 @@ async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 # ------------- PTB COMMANDS -------------
 async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage:
-/setlinkchatid <group_link_or_chatid>")
+        await update.message.reply_text("Usage:/setlinkchatid <group_link_or_chatid>")
         return
 
     chat_targets[update.effective_chat.id] = " ".join(context.args)
