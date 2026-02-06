@@ -23,8 +23,7 @@ loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> task
 waiting_futures: dict[int, asyncio.Future] = {}  # chat_id -> future
 bot_b_status = "UNKNOWN"
 
-IP_CMD_REGEX = re.compile(r"/attacks+(d+.d+.d+.d+)s+(d+)s+(d+)", re.I)
-
+IP_CMD_REGEX = re.compile(r"/attack\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+)",re.I)
 
 # ------------- BOT-A LISTENER (IP BOT) -------------
 @tele.on(events.NewMessage(from_users=BOT_A))
@@ -95,14 +94,7 @@ async def main_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
         # 3) Send attack command to BOT_B
         await tele.send_message(BOT_B, attack_cmd)
-
-        await context.bot.send_message(
-            chat_id,
-            f"✅ Task sent:
-`{attack_cmd}`",
-            parse_mode="Markdown"
-        )
-
+        await context.bot.send_message(chat_id,f"✅ Task sent:\n`{attack_cmd}`",parse_mode="Markdown")
         await asyncio.sleep(3)
 
 
