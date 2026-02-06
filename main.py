@@ -1,3 +1,4 @@
+import threading
 import asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -10,9 +11,9 @@ API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
 BOT_TOKEN = "8257314385:AAF1Fu0xaaXKZB-jZnn4e1og4fX8RSjLkmM"
 TARGET_BOT = "@botbysahilbot"
 
-STRING_SESSION = "1BVtsOKEBu73mh4SW00pWPqOS8h6p4Gk6bVtQ5bgBPMaR645jIhARGSfzkmyEQEYhOAh2AEv8mq9EZL86Zd95StVzPwWaQLNl-EbOp5fVVeFK_ZUuN93mEZFMEuF7o6LCMgbJwvgVQuWQdycOnB652OY_zzZvOLcOPxWuLQOvLIuwtoYpNvL3Qs_PfGGHNAojo7k-NgMFURnj_UP0rh7RRDvAWN7lT1_jzma5dn7HhkPgsrwSieDtgqBkDftRxZQc9FYG2iYmyoJarEhfrqn3UbrueWqN0XiO983MRg-EavUGFWPNQ4QnQgUEf-uptcaeroorCOBv0gCfr3DjpFv4oLrG-SHkrFA="
+STRING_SESSION = "1BVtsOKEBu73mh4SW00pWPqOS8h6p4Gk6bVtQ5bgBPMaR645jIhARGSfzkmyEQEYhOAh2AEv8mq9EZL86Zd95StVzPwWaQLNl-EbOp5FVEuF7o6LCMgbJwvgVQuWQdycOnB652OY_zzZvOLcOPxWuLQOvLIuwtoYpNvL3Qs_PfGGHNAojo7k-NgMFURnj_UP0rh7RRDvAWN7lT1_jzma5dn7HhkPgsrwSieDtgqBkDftRxZQc9FYG2iYmyoJarEhfrqn3UbrueWqN0XiO983MRg-EavUGFWPNQ4QnQgUEf-uptcaeroorCOBv0gCfr3DjpFv4oLrG-SHkrFA="
 
-# ---------- Telethon client ----------
+# -------- Telethon client --------
 
 tele_client = TelegramClient(
     StringSession(STRING_SESSION),
@@ -24,31 +25,39 @@ tele_client = TelegramClient(
 async def target_listener(event):
     print("📩 TARGET BOT REPLY:", event.text)
 
-# ---------- Telegram Bot (python-telegram-bot) ----------
+def start_telethon():
+    # Telethon apna khud ka event loop use karega is thread ke andar
+    asyncio.run(run_telethon())
+
+async def run_telethon():
+    await tele_client.start()
+    print("🧵 Telethon running")
+    await tele_client.run_until_disconnected()
+
+# -------- Telegram Bot (python-telegram-bot) --------
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚀 Working...")
 
+    # Telethon se message bhejne ke liye uska loop use karna padega
+    # isliye uska client direct await nahi karte, simple send karke chhod sakte ho
     if not tele_client.is_connected():
         await tele_client.connect()
 
     await tele_client.send_message(TARGET_BOT, "/start")
     await update.message.reply_text("📤 Sent to target bot")
 
-def run_bot():
+def main():
+    # Telethon ko background thread me chalao
+    t = threading.Thread(target=start_telethon, daemon=True)
+    t.start()
+
+    # PTB normal sync run_polling (yahan apna loop manage karega)
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
 
     print("🤖 BOT RUNNING")
-    # IMPORTANT: no await here; this manages its own loop
-    app.run_polling()
-
-async def main():
-    # Start Telethon client in this event loop
-    await tele_client.start()
-
-    # Now hand over control to PTB's own loop
-    run_bot()
+    app.run_polling()  # yahan koi asyncio.run ya await nahi
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
