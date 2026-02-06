@@ -37,7 +37,7 @@ async def target_listener(event):
     if last_request_chat_id is None:
         return
 
-    # CMD line nikaalo  (yahan typo tha: CMD:s* -> CMD:s*)
+    # CMD line nikaalo
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
@@ -49,7 +49,7 @@ async def target_listener(event):
     bot = Bot(BOT_TOKEN)
     await bot.send_message(
         chat_id=last_request_chat_id,
-        text=f"✅ CMD:
+        text=f"CMD:
 `{final_cmd}`",
         parse_mode="Markdown"
     )
