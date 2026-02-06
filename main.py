@@ -1,10 +1,11 @@
+
 import threading
 import asyncio
 import re
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 API_ID = 36295148
@@ -38,19 +39,17 @@ async def target_listener(event):
         return
 
     # CMD line nikaalo
-    m = re.search(r"CMD:s*(.+)", text)
+    m = re.search(r"CMD:\s*(.+)", text)
     if not m:
         return
 
     final_cmd = m.group(1)
     print("✅ FINAL CMD:", final_cmd)
 
-    from telegram import Bot
     bot = Bot(BOT_TOKEN)
     await bot.send_message(
         chat_id=last_request_chat_id,
-        text=f"CMD:
-`{final_cmd}`",
+        text=f"CMD:\n`{final_cmd}`",
         parse_mode="Markdown"
     )
 
@@ -69,15 +68,11 @@ async def run_telethon():
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Use:
-"
-        "/getip all <link_or_chatid>
-"
-        "Example:
-"
-        "/getip all https://t.me/Chatting_Groupc
-"
-        "/getip all -1002175729395"
+        """Use:
+/getip all <link_or_chatid>
+Example:
+/getip all https://t.me/Chatting_Groupc
+/getip all -1002175729395"""
     )
 
 async def getip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -90,15 +85,11 @@ async def getip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(context.args) < 2 or context.args[0].lower() != "all":
         await update.message.reply_text(
-            "Usage:
-"
-            "/getip all <link_or_chatid>
-"
-            "Example:
-"
-            "/getip all https://t.me/Chatting_Groupc
-"
-            "/getip all -1002175729395"
+            """Usage:
+/getip all <link_or_chatid>
+Example:
+/getip all https://t.me/Chatting_Groupc
+/getip all -1002175729395"""
         )
         return
 
@@ -111,8 +102,6 @@ async def getip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not tele_client.is_connected():
             await tele_client.connect()
 
-        # bilkul waise hi jaise tum manually likhte ho:
-        # .getip all <link_or_chatid>
         cmd = f".getip all {link_or_chatid}"
         await tele_client.send_message(TARGET_BOT, cmd)
 
