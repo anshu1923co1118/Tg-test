@@ -35,19 +35,20 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await tele_client.send_message(TARGET_BOT, "/start")
     await update.message.reply_text("📤 Sent to target bot")
 
-async def run_bot():
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
 
     print("🤖 BOT RUNNING")
-    await app.run_polling()
+    # IMPORTANT: no await here; this manages its own loop
+    app.run_polling()
 
 async def main():
-    # Start telethon client
+    # Start Telethon client in this event loop
     await tele_client.start()
 
-    # Run telegram bot (this will block until stop)
-    await run_bot()
+    # Now hand over control to PTB's own loop
+    run_bot()
 
 if __name__ == "__main__":
     asyncio.run(main())
