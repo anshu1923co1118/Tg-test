@@ -27,7 +27,7 @@ last_request_chat_id: int | None = None
 @tele_client.on(events.NewMessage(from_users=TARGET_BOT))
 async def target_listener(event):
     """
-    IP bot ka pura result aayega; yahan se CMD: line cut karke
+    IP bot ka result aayega; CMD: line cut karke
     last_request_chat_id wale user ko bhejna hai.
     """
     global last_request_chat_id
@@ -37,7 +37,7 @@ async def target_listener(event):
     if last_request_chat_id is None:
         return
 
-    # CMD line nikaalo
+    # CMD line nikaalo  (yahan typo tha: CMD:s* -> CMD:s*)
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
@@ -90,7 +90,9 @@ async def getip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(context.args) < 2 or context.args[0].lower() != "all":
         await update.message.reply_text(
-            "Usage: /getip all <link_or_chatid>
+            "Usage:
+"
+            "/getip all <link_or_chatid>
 "
             "Example:
 "
