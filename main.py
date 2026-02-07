@@ -37,13 +37,17 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
-    # FIX: regex me s lagao
+    # CMD line nikaalo
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
 
     final_cmd = m.group(1).strip()
-    print("✅ FINAL CMD:", final_cmd)
+
+    # Markdown clean: **, backticks, extra space hatao
+    final_cmd = final_cmd.replace("**", "").replace("`", "").strip()
+
+    print("✅ FINAL CMD CLEAN:", final_cmd)
 
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
