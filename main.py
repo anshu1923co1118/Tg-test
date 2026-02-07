@@ -34,29 +34,35 @@ bot_b_status = "UNKNOWN"
 # ---------- LISTENERS ----------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
+    """
+    IP BOT ke reply se CMD line ya direct /attack command nikalta hai
+    aur waiting chats ko final_cmd return karta hai.
+    """
     text = event.text or ""
-    print("📩 IP BOT REPLY:", text)
+    print("📩 IP BOT REPLY:", repr(text))
 
-    # 1) Get everything after 'CMD:'
+    # Default: pura text
+    raw_cmd = text.strip()
+
+    # 1) Agar message me 'CMD:' hai (old format), to uske baad ka part le lo
     m = re.search(r"CMD:s*(.+)", text, flags=re.IGNORECASE | re.DOTALL)
-    if not m:
-        return
+    if m:
+        raw_cmd = m.group(1).strip()
 
-    raw_cmd = m.group(1).strip()
-
-    # 2) Remove leading asterisks like '** /attack ...'
+    # 2) Starting ke '** ' jaisi asterisks hatao
     raw_cmd = re.sub(r"^*+s*", "", raw_cmd)
 
-    # 3) Extract only the /attack command part
+    # 3) Sirf /attack <ip> <port> <time> pattern nikaalo
     m2 = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
     if m2:
         final_cmd = m2.group(1).strip()
     else:
-        # Fallback: use cleaned text if pattern not matched
+        # Agar /attack nahi mila to raw_cmd hi bhej do (fallback)
         final_cmd = raw_cmd
 
     print("✅ FINAL CMD:", final_cmd)
 
+    # Jo chats wait kar rahe the unko result de do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
@@ -132,7 +138,7 @@ Sending `.getip all {target}` to IP BOT…''',
             "🔎 Checking BOT_B `/status` until READY…"
         )
 
-        # Reset status before polling (optional but safer)
+        # Reset status before polling
         bot_b_status = "UNKNOWN"
 
         while True:
@@ -146,6 +152,7 @@ Sending `.getip all {target}` to IP BOT…''',
             )
             await asyncio.sleep(5)
 
+        # Final command BOT_B ko bhejo
         await tele.send_message(BOT_B, final_cmd)
         await context.bot.send_message(
             chat_id,
