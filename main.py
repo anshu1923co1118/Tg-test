@@ -1,3 +1,4 @@
+
 import asyncio
 import re
 from telethon import TelegramClient, events
@@ -45,16 +46,26 @@ bot_b_status = "UNKNOWN"
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     """
-    IP BOT ka reply listen karo, CMD line nikaalo, sab pending chats ko de do.
+    IP BOT ka reply listen karo, CMD line clean karke pending chats ko do.
     """
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
-    m = re.search(r"CMD:s*(.+)", text)
-    if not m:
+    # "CMD:" wali line dhoondo
+    m_line = re.search(r"CMD:s*(.+)", text)
+    if not m_line:
         return
 
-    final_cmd = m.group(1).strip()
+    line = m_line.group(1).strip()
+
+    # Agar backticks hain to unke andar ka content lo
+    m_cmd = re.search(r"`([^`]+)`", line)
+    if m_cmd:
+        final_cmd = m_cmd.group(1).strip()
+    else:
+        # fallback: leading ** ya * ya spaces hata do
+        final_cmd = line.lstrip("* ").strip()
+
     print("✅ FINAL CMD:", final_cmd)
 
     for chat_id, fut in list(ip_waiters.items()):
@@ -66,7 +77,7 @@ async def ip_bot_listener(event):
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     """
-    DDOS BOT ke /status ya attack replies se READY/RUNNING/COOLDOWN detect karo.
+    DDOS BOT ke /status / attack / cooldown messages se status set karo.
     """
     global bot_b_status
     text = event.text or ""
@@ -75,7 +86,7 @@ async def bot_b_listener(event):
 
     if "ʀᴇᴀᴅʏ" in text or "✅" in text:
         bot_b_status = "READY"
-    elif "ʀᴜɴɴɪɴɢ" in text or "running" in low:
+    elif "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text or "running" in low:
         bot_b_status = "RUNNING"
     elif "ᴄᴏᴏʟᴅᴏᴡɴ" in text or "cooldown" in low:
         bot_b_status = "COOLDOWN"
@@ -152,7 +163,7 @@ Sending `.getip all {target}` to IP BOT…''',
         bot_b_status = "UNKNOWN"
         ready = False
 
-        for _ in range(9):           # 9 × 5s ≈ 45s
+        for _ in range(9):           # 9 × ~5s ≈ 45s
             await tele.send_message(BOT_B, "/status")
             await asyncio.sleep(2)   # reply ka wait
 
