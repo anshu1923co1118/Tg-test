@@ -96,9 +96,7 @@ async def startfsm_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     for i in range(count):
         await context.bot.send_message(
             chat_id,
-            f"➡️ Round {i + 1}/{count if count < 10**9 else '∞'}:
-"
-            f"Sending `.getip all {target}` to IP BOT…",
+            f"➡️ Round {i + 1}/{count if count < 10**9 else 'h'}:Sending `.getip all {target}` to IP BOT…",
             parse_mode="Markdown",
         )
 
