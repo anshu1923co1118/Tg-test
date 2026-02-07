@@ -180,7 +180,19 @@ async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await asyncio.sleep(delay)
 
     await update.message.reply_text("✅ Auto loop finished.")
+# ---------- START COMMAND ----------
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = """
+👋 Welcome!
 
+Available commands:
+/setlinkchatid <link_or_chatid> - Target group/chat set karo
+/setcount <number_of_attacks>  - Attacks ka count set karo
+/startloop                     - Ek single attack round
+/autoloop                      - setcount ke hisaab se auto attacks
+/stoploop                      - Auto loop info
+"""
+    await update.message.reply_text(text.strip())
 
 # ---------- PTB COMMANDS ----------
 async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,12 +229,13 @@ async def main():
     print("🧵 Telethon connected")
 
     app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("setlinkchatid", setlink))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("autoloop", autoloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
-
+    
     print("🤖 Control bot running")
     await app.initialize()
     await app.start()
