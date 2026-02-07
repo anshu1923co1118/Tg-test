@@ -103,8 +103,7 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         await tele.send_message(BOT_B, attack_cmd)
         await context.bot.send_message(
             chat_id,
-            f"✅ Task sent:
-`{attack_cmd}`",
+            f"✅ Task sent:`{attack_cmd}`",
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
