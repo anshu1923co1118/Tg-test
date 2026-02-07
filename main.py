@@ -1,3 +1,4 @@
+
 import threading
 import asyncio
 import re
@@ -18,12 +19,13 @@ STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qU
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-chat_targets: dict[int, str] = {}          # chat_id -> target
-loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> telethon task
-waiting_futures: dict[int, asyncio.Future] = {}  # chat_id -> future for IP reply
+# chat_id -> target / task / future
+chat_targets: dict[int, str] = {}
+loop_tasks: dict[int, asyncio.Task] = {}
+waiting_futures: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
-# /attack <ip_or_host> <port> <time>
+# IP BOT response: "CMD: /attack 91.108.17.23 32003 30"
 IP_CMD_REGEX = re.compile(r"/attacks+S+s+d+s+d+", re.I)
 
 
@@ -33,7 +35,7 @@ async def bot_a_listener(event):
     text = event.text or ""
     print("IP BOT REPLY:", text)
 
-    # Sirf tab future resolve karo jab /attack pattern mila ho
+    # Sirf jab /attack pattern mile tabhi future resolve karo
     if not IP_CMD_REGEX.search(text):
         return
 
@@ -101,8 +103,7 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         # 3) BOT_B ko /attack bhejo
         await tele.send_message(BOT_B, attack_cmd)
         await context.bot.send_message(
-            chat_id,
-            f"✅ Task sent:`{attack_cmd}`",
+            chat_id,f"✅ Task sent:`{attack_cmd}`",
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
