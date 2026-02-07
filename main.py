@@ -204,11 +204,11 @@ async def cmd_startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = state["target"]
 
     await update.message.reply_text(
-        f'''✅ Event-driven mode ON.
+        f''''✅ Event-driven mode ON.
         • /setlinkchatid se target set karo.
-        "• BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
-        "• BOT_B READY hote hi pending attack auto start hoga.
-        "• Naya CMD aane par purana auto /stop + naya start.'''
+        • BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
+        • BOT_B READY hote hi pending attack auto start hoga.
+        • Naya CMD aane par purana auto /stop + naya start.'''
     )
 
     if target:
@@ -237,15 +237,18 @@ async def cmd_stopfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     global BOT_A_ID, BOT_B_ID
 
+    # Telethon start
     await tele.start()
     print("Telethon connected")
 
+    # Resolve bot IDs
     bot_a = await tele.get_entity(BOT_A_USERNAME)
     bot_b = await tele.get_entity(BOT_B_USERNAME)
     BOT_A_ID = bot_a.id
     BOT_B_ID = bot_b.id
     print("BOT_A_ID:", BOT_A_ID, "BOT_B_ID:", BOT_B_ID)
 
+    # PTB app
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlinkchatid", cmd_setlink))
     app.add_handler(CommandHandler("startfsm", cmd_startfsm))
@@ -253,14 +256,18 @@ async def main():
 
     print("Control bot running (event-driven)")
 
-    ptb_task = asyncio.create_task(app.run_polling(close_loop=False))
+    # Pure async startup – no nested event loops
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    print("PTB started")
 
     try:
         await tele.run_until_disconnected()
     finally:
+        await app.updater.stop()
         await app.stop()
         await app.shutdown()
-        ptb_task.cancel()
 
 
 if __name__ == "__main__":
