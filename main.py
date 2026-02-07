@@ -37,17 +37,17 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
-    # CMD line nikaalo
+    # FIX 1: regex me s
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
 
     final_cmd = m.group(1).strip()
 
-    # Markdown clean: **, backticks, extra space hatao
+    # FIX 2: markdown clean (optional but safe)
     final_cmd = final_cmd.replace("**", "").replace("`", "").strip()
 
-    print("✅ FINAL CMD CLEAN:", final_cmd)
+    print("✅ FINAL CMD:", final_cmd)
 
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
@@ -62,7 +62,7 @@ async def bot_b_listener(event):
     low = text.lower()
     print("DDOS BOT MSG:", repr(text))
 
-    # READY patterns
+    # READY patterns (unicode + plain text)
     if "✅ **ʀᴇᴀᴅʏ**" in text or "no attack running" in low or "you can start a new attack" in low:
         bot_b_status = "READY"
     # RUNNING patterns
@@ -130,7 +130,6 @@ Sending `.getip all {target}` to IP BOT…''',
             "🔎 Checking BOT_B `/status` until READY…"
         )
 
-        # status loop
         while True:
             await tele.send_message(BOT_B, "/status")
             await asyncio.sleep(2)
