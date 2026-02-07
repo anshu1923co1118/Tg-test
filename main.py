@@ -11,7 +11,7 @@ API_ID = 36295148
 API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
 BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
-BOT_A = "@botbysahilbot"          # IP BOT (TARGET_BOT in old code)
+BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # TASK EXECUTER BOT
 
 STRING_SESSION = "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37rfUZra0WJqTRjSox2F7NSUqUi9_bSizm3sfw3Ez5GszsCnrgY7IVixINZgjWQobFkg4JmOePZb14z6XNO1e1oqNQ_oxugaQN0cBB3IWaH0BaY4G8-O4IfF3GsY_QIbFlLdJeLCxIA6Tah1SHTrTdK4reg_9Vig2snpHSri02cNdkoawDBk1QUyo3mL6r4v7uuO0b5w7LpwjCmJnvYUaWOH0uy14seFuaU4gSnQNvvz79sK_p8vQoZm6h2HLUIOwZLZRugWZ-_iRiaYiU="
@@ -23,17 +23,18 @@ chat_targets: dict[int, str] = {}          # chat_id -> link_or_chatid
 chat_counts: dict[int, int] = {}           # chat_id -> number of rounds
 loop_tasks: dict[int, asyncio.Task] = {}   # chat_id -> loop task
 
-# Old-code style: per chat future
+# per chat future
 ip_waiters: dict[int, asyncio.Future] = {}  # chat_id -> Future for CMD from BOT_A
 bot_b_status = "UNKNOWN"
 
-# -------- IP BOT LISTENER (same idea as working code) --------
+
+# -------- IP BOT LISTENER --------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
-    # Simple CMD line extraction (works with: CMD: /attack ...)
+    # Correct regex: s* not s*
     m = re.search(r"CMD:s*(.+)", text)
     if not m:
         return
@@ -41,7 +42,6 @@ async def ip_bot_listener(event):
     final_cmd = m.group(1).strip()
     print("✅ FINAL CMD:", final_cmd)
 
-    # Resolve all pending chats (same idea as last_requests)
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
@@ -63,9 +63,8 @@ async def bot_b_listener(event):
         bot_b_status = "UNKNOWN"
 
 
-# -------- CORE LOOP PER CHAT (uses old IP logic) --------
+# -------- CORE LOOP PER CHAT --------
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Har chat ke liye: IP BOT se CMD le, BOT_B ko bhej, count bar repeat."""
     global bot_b_status
 
     target = chat_targets.get(chat_id)
@@ -77,27 +76,22 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         return
 
     count = chat_counts.get(chat_id, 1)
+
+    # yaha pe pehle error aa raha tha -> ab triple quoted f-string
     await context.bot.send_message(
         chat_id,
-        (
-            "🔁 Loop configured.
-"
-            f"Target: `{target}`
-"
-            f"Rounds: {count}"
-        ),
+        f'''🔁 Loop configured.
+Target: `{target}`
+Rounds: {count}''',
         parse_mode="Markdown",
     )
 
     for i in range(count):
-        # 1) Send `.getip all` to IP BOT (same as working getip_cmd)
+        # 1) .getip all
         await context.bot.send_message(
             chat_id,
-            (
-                f"➡️ Round {i+1}/{count}:
-"
-                f"Sending `.getip all {target}` to IP BOT…"
-            ),
+            f'''➡️ Round {i + 1}/{count}:
+Sending `.getip all {target}` to IP BOT…''',
             parse_mode="Markdown",
         )
 
@@ -118,15 +112,12 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id,
-            (
-                "📥 IP BOT CMD received:
-"
-                f"`{final_cmd}`"
-            ),
+            f'''📥 IP BOT CMD received:
+`{final_cmd}`''',
             parse_mode="Markdown",
         )
 
-        # 2) Wait until BOT_B is READY
+        # 2) BOT_B READY
         await context.bot.send_message(
             chat_id,
             "🔎 Checking BOT_B `/status` until READY…"
@@ -139,22 +130,16 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
                 break
             await context.bot.send_message(
                 chat_id,
-                (
-                    "⏸ BOT_B status: "
-                    f"{bot_b_status} (waiting 5s…)"
-                )
+                f'''⏸ BOT_B status: {bot_b_status} (waiting 5s…)'''
             )
             await asyncio.sleep(5)
 
-        # 3) Send CMD to BOT_B
+        # 3) send CMD to BOT_B
         await tele.send_message(BOT_B, final_cmd)
         await context.bot.send_message(
             chat_id,
-            (
-                "🚀 Sent to BOT_B:
-"
-                f"`{final_cmd}`"
-            ),
+            f'''🚀 Sent to BOT_B:
+`{final_cmd}`''',
             parse_mode="Markdown",
         )
         await asyncio.sleep(3)
@@ -208,7 +193,7 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No active loop running")
 
 
-# -------- TELETHON RUNNER (separate thread, same as pehle) --------
+# -------- TELETHON RUNNER --------
 def start_telethon():
     asyncio.run(run_telethon())
 
