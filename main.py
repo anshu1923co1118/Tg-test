@@ -182,8 +182,7 @@ async def cmd_setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
         state["target"] = target
 
     await update.message.reply_text(
-        f"✅ Target saved for this chat:
-`{target}`",
+        f"✅ Target saved for this chat:`{target}`",
         parse_mode="Markdown",
     )
 
@@ -205,15 +204,11 @@ async def cmd_startfsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = state["target"]
 
     await update.message.reply_text(
-        "✅ Event-driven mode ON.
-"
-        "• /setlinkchatid se target set karo.
-"
+        f'''✅ Event-driven mode ON.
+        • /setlinkchatid se target set karo.
         "• BOT_A (.getip) se jo CMD aayega wo auto parse hoga.
-"
         "• BOT_B READY hote hi pending attack auto start hoga.
-"
-        "• Naya CMD aane par purana auto /stop + naya start."
+        "• Naya CMD aane par purana auto /stop + naya start.'''
     )
 
     if target:
