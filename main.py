@@ -147,8 +147,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id,
-        f"📥 CMD from IP BOT:
-`{final_cmd}`",
+        f"📥 CMD from IP BOT:`{final_cmd}`",
         parse_mode="Markdown",
     )
 
@@ -156,8 +155,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await tele.send_message(BOT_B, final_cmd)
     await context.bot.send_message(
         chat_id,
-        f"🚀 Sent to DDOS BOT:
-`{final_cmd}`",
+        f"🚀 Sent to DDOS BOT:`{final_cmd}`",
         parse_mode="Markdown",
     )
 
@@ -174,9 +172,7 @@ async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     delay = 45  # seconds: 30s attack + 10–15s cooldown buffer
 
     await update.message.reply_text(
-        f"🔁 Auto loop starting.
-Attacks: {count}
-Delay: {delay}s between each."
+        f"🔁 Auto loop starting.Attacks: {count}Delay: {delay}s between each."
     )
 
     for i in range(count):
