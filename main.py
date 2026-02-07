@@ -30,46 +30,39 @@ loop_tasks: dict[int, asyncio.Task] = {}
 ip_waiters: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
-
-# ---------- LISTENERS ----------
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     """
-    IP BOT ke reply se CMD line ya direct /attack command nikalta hai
-    aur waiting chats ko final_cmd return karta hai.
+    IP BOT ka reply listen karo, CMD line clean karke pending chats ko do.
     """
     text = event.text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # Default: pura text
-    raw_cmd = text.strip()
+    # "CMD:" wali line dhoondo (sahi regex: s*)
+    m_line = re.search(r"CMD:s*(.+)", text)
+    if not m_line:
+        return
 
-    # 1) Pehle 'CMD:' ke baad wala part nikaalo
-    m = re.search(r"**CMD:**s*`?(.+?)`?$", text, flags=re.IGNORECASE | re.MULTILINE)
-    if m:
-        # Backticks ke andar ka content
-        raw_cmd = m.group(1).strip()
+    line = m_line.group(1).strip()
+
+    # Pehle backticks ke andar ka command try karo
+    m_cmd = re.search(r"`([^`]+)`", line)
+    if m_cmd:
+        # e.g. `/attack 91.108.17.54 32003 30`
+        raw_cmd = m_cmd.group(1).strip()
     else:
-        # Generic fallback: "CMD:" ke baad sab kuch
-        m2 = re.search(r"CMD:s*`?(.+?)`?$", text, flags=re.IGNORECASE | re.MULTILINE)
-        if m2:
-            raw_cmd = m2.group(1).strip()
+        # fallback: leading ** ya * ya spaces hata do
+        raw_cmd = line.lstrip("* ").strip()
 
-    # 2) Agar beginning me '** ' jaisa kuch ho to normal strip se saf karo
-    # (regex ki zarurat hi nahi)
-    raw_cmd = raw_cmd.lstrip("* ").strip()
-
-    # 3) Sirf /attack <ip> <port> <time> pattern nikaalo
-    m3 = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
-    if m3:
-        final_cmd = m3.group(1).strip()
+    # Sirf /attack <ip> <port> <time> pattern nikaalo (optional, extra safety)
+    m_attack = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
+    if m_attack:
+        final_cmd = m_attack.group(1).strip()
     else:
-        # Agar /attack nahi mila to raw_cmd hi bhej do (fallback)
         final_cmd = raw_cmd
 
     print("✅ FINAL CMD:", final_cmd)
 
-    # Jo chats wait kar rahe the unko result de do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
