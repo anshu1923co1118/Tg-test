@@ -37,11 +37,24 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", text)
 
-    m = re.search(r"CMD:s*(.+)", text)
+    # 1) Get everything after 'CMD:'
+    m = re.search(r"CMD:s*(.+)", text, flags=re.IGNORECASE | re.DOTALL)
     if not m:
         return
 
-    final_cmd = m.group(1).strip()
+    raw_cmd = m.group(1).strip()
+
+    # 2) Remove leading asterisks like '** /attack ...'
+    raw_cmd = re.sub(r"^*+s*", "", raw_cmd)
+
+    # 3) Extract only the /attack command part
+    m2 = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
+    if m2:
+        final_cmd = m2.group(1).strip()
+    else:
+        # Fallback: use cleaned text if pattern not matched
+        final_cmd = raw_cmd
+
     print("✅ FINAL CMD:", final_cmd)
 
     for chat_id, fut in list(ip_waiters.items()):
@@ -118,6 +131,9 @@ Sending `.getip all {target}` to IP BOT…''',
             chat_id,
             "🔎 Checking BOT_B `/status` until READY…"
         )
+
+        # Reset status before polling (optional but safer)
+        bot_b_status = "UNKNOWN"
 
         while True:
             await tele.send_message(BOT_B, "/status")
