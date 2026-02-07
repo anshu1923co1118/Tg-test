@@ -1,4 +1,3 @@
-
 import asyncio
 import re
 from telethon import TelegramClient, events
@@ -77,21 +76,28 @@ async def ip_bot_listener(event):
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     """
-    DDOS BOT ke /status / attack / cooldown messages se status set karo.
+    DDOS BOT ke /status replies se status set karo.
+    Attack progress / cooldown spam ko ignore nahi karte,
+    sirf pattern se detect karte hain.
     """
     global bot_b_status
     text = event.text or ""
     low = text.lower()
     print("DDOS BOT MSG:", repr(text))
 
-    if "ʀᴇᴀᴅʏ" in text or "✅" in text:
+    # READY status (tumhare /status screenshot jaisa)
+    if "✅ **ʀᴇᴀᴅʏ**" in text or "no attack running" in low:
         bot_b_status = "READY"
-    elif "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text or "running" in low:
-        bot_b_status = "RUNNING"
-    elif "ᴄᴏᴏʟᴅᴏᴡɴ" in text or "cooldown" in low:
+
+    # COOLDOWN status
+    elif "⏳ **ᴄᴏᴏʟᴅᴏᴡɴ**" in text or "cooldown" in low:
         bot_b_status = "COOLDOWN"
-    else:
-        bot_b_status = "UNKNOWN"
+
+    # RUNNING status
+    elif "🔥 **ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ**" in text or "attack running" in low:
+        bot_b_status = "RUNNING"
+
+    # baaki messages (agar format change ho jaye) ignore kar sakte ho
 
 
 # ==== CORE LOOP PER CHAT ====
@@ -160,12 +166,15 @@ Sending `.getip all {target}` to IP BOT…''',
             "🔎 Checking BOT_B `/status` (every 5s, max 45s)…"
         )
 
-        bot_b_status = "UNKNOWN"
         ready = False
 
         for _ in range(9):           # 9 × ~5s ≈ 45s
+            # is cycle ke liye status reset
+            global bot_b_status
+            bot_b_status = "UNKNOWN"
+
             await tele.send_message(BOT_B, "/status")
-            await asyncio.sleep(2)   # reply ka wait
+            await asyncio.sleep(2)        # /status reply ka wait
 
             if bot_b_status == "READY":
                 ready = True
@@ -175,7 +184,7 @@ Sending `.getip all {target}` to IP BOT…''',
                 chat_id,
                 f"⏸ BOT_B status: {bot_b_status} (waiting 5s…)"
             )
-            await asyncio.sleep(3)   # total ~5s per cycle
+            await asyncio.sleep(3)        # total ~5s per cycle
 
         if not ready:
             await context.bot.send_message(
