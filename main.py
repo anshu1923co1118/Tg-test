@@ -72,17 +72,33 @@ async def ip_bot_listener(event):
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     global bot_b_status
-    t = (event.text or "").lower()
-    if "ready" in t:
+    text = event.text or ""
+    low = text.lower()
+    print("DDOS BOT MSG:", repr(text))
+
+    # READY patterns (unicode + plain text)
+    if (
+        "✅ **ʀᴇᴀᴅʏ**" in text
+        or "no attack running" in low
+        or "you can start a new attack" in low
+    ):
         bot_b_status = "READY"
-    elif "running" in t:
+
+    # RUNNING patterns
+    elif (
+        "attack started" in low
+        or "ᴀᴛᴛᴀᴄᴋ sᴛᴀʀᴛᴇᴅ" in text
+        or "attack running" in low
+        or "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
+    ):
         bot_b_status = "RUNNING"
-    elif "cooldown" in t:
+
+    # COOLDOWN patterns
+    elif "cooldown" in low or "⏳" in text:
         bot_b_status = "COOLDOWN"
+
     else:
         bot_b_status = "UNKNOWN"
-
-
 # ---------- CORE LOOP ----------
 async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     global bot_b_status
