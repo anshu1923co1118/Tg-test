@@ -44,18 +44,25 @@ async def ip_bot_listener(event):
     # Default: pura text
     raw_cmd = text.strip()
 
-    # 1) Agar message me 'CMD:' hai (old format), to uske baad ka part le lo
-    m = re.search(r"CMD:s*(.+)", text, flags=re.IGNORECASE | re.DOTALL)
+    # 1) Pehle 'CMD:' ke baad wala part nikaalo
+    m = re.search(r"**CMD:**s*`?(.+?)`?$", text, flags=re.IGNORECASE | re.MULTILINE)
     if m:
+        # Backticks ke andar ka content
         raw_cmd = m.group(1).strip()
+    else:
+        # Generic fallback: "CMD:" ke baad sab kuch
+        m2 = re.search(r"CMD:s*`?(.+?)`?$", text, flags=re.IGNORECASE | re.MULTILINE)
+        if m2:
+            raw_cmd = m2.group(1).strip()
 
-    # 2) Starting ke '** ' jaisi asterisks hatao
-    raw_cmd = re.sub(r"^*+s*", "", raw_cmd)
+    # 2) Agar beginning me '** ' jaisa kuch ho to normal strip se saf karo
+    # (regex ki zarurat hi nahi)
+    raw_cmd = raw_cmd.lstrip("* ").strip()
 
     # 3) Sirf /attack <ip> <port> <time> pattern nikaalo
-    m2 = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
-    if m2:
-        final_cmd = m2.group(1).strip()
+    m3 = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
+    if m3:
+        final_cmd = m3.group(1).strip()
     else:
         # Agar /attack nahi mila to raw_cmd hi bhej do (fallback)
         final_cmd = raw_cmd
