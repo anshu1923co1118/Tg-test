@@ -150,7 +150,6 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ---------- AUTO LOOP (stop-able) ----------
 async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     count = chat_counts.get(chat_id, 1)
@@ -168,25 +167,27 @@ async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔁 Auto loop start kar raha hu.Attacks: {count}Delay: ~{base_delay}s (thoda up/down) har attack ke beech."
     )
 
-    for i in range(count):
-        if not auto_running.get(chat_id):
-            await human_type_and_send(context, chat_id, "🛑 Auto loop stop kar diya.")
-            break
-
-        await human_type_and_send(
-            context,
-            chat_id,
-            f"▶️ Attack {i + 1}/{count} shuru karte hain…"
-        )
-
-        await single_round(chat_id, context)
-
-        if i != count - 1:
+    try:
+        for i in range(count):
             if not auto_running.get(chat_id):
                 await human_type_and_send(context, chat_id, "🛑 Auto loop stop kar diya.")
                 break
 
-            # human‑like random delay (base_delay ± 10s)
+            await human_type_and_send(
+                context,
+                chat_id,
+                f"▶️ Attack {i + 1}/{count} shuru karte hain…"
+            )
+
+            await single_round(chat_id, context)
+
+            if i == count - 1:
+                break
+
+            if not auto_running.get(chat_id):
+                await human_type_and_send(context, chat_id, "🛑 Auto loop stop kar diya.")
+                break
+
             delay = base_delay + random.randint(-10, 10)
             await human_type_and_send(
                 context,
@@ -205,10 +206,9 @@ async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.sleep(1)
             if not auto_running.get(chat_id):
                 break
-
-    auto_running[chat_id] = False
-    await human_type_and_send(context, chat_id, "✅ Auto loop khatam ho gaya.")
-
+    finally:
+        auto_running[chat_id] = False
+        await human_type_and_send(context, chat_id, "✅ Auto loop khatam ho gaya.")
 
 # ---------- START COMMAND ----------
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
