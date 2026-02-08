@@ -136,8 +136,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await human_type_and_send(
         context,
         chat_id,
-        f"📥 IP BOT ne ye CMD diya:
-`{final_cmd}`"
+        f"📥 IP BOT ne ye CMD diya:`{final_cmd}`"
     )
 
     # DDOS bot ko bhejne se pehle halka random delay
@@ -147,8 +146,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await human_type_and_send(
         context,
         chat_id,
-        f"🚀 DDOS BOT ko bhej diya:
-`{final_cmd}`"
+        f"🚀 DDOS BOT ko bhej diya:`{final_cmd}`"
     )
 
 
@@ -167,9 +165,7 @@ async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await human_type_and_send(
         context,
         chat_id,
-        f"🔁 Auto loop start kar raha hu.
-Attacks: {count}
-Delay: ~{base_delay}s (thoda up/down) har attack ke beech."
+        f"🔁 Auto loop start kar raha hu.Attacks: {count}Delay: ~{base_delay}s (thoda up/down) har attack ke beech."
     )
 
     for i in range(count):
