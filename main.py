@@ -14,14 +14,16 @@ BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
 
-STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
+STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
 # --------- STATE ---------
 
-chat_targets: dict[int, str] = {}
+chat_targets: dict[int, str] = {}        # current target per TG chat
 chat_counts: dict[int, int] = {}
+saved_targets: dict[int, list[str]] = {} # multiple saved links/ids per TG chat
+
 ip_waiters: dict[int, asyncio.Future] = {}
 bot_b_status = "UNKNOWN"
 
@@ -60,9 +62,11 @@ async def ip_bot_listener(event):
     else:
         raw_cmd = line.lstrip("* ").strip()
 
-
-    # attack time ko 50 fix karne ka example
-    final_cmd = raw_cmd[:-2] + "50"  # simply 30 -> 50
+    # last 2 chars ko 50 kar do (30 -> 50)
+    if len(raw_cmd) >= 2:
+        final_cmd = raw_cmd[:-2] + "50"
+    else:
+        final_cmd = raw_cmd
 
     print("✅ FINAL CMD:", final_cmd)
 
@@ -104,7 +108,7 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         await human_type_and_send(
             context,
             chat_id,
-            "❌ Pehle /setlinkchatid se target set karo."
+            "❌ Pehle target set karo. /addchat se add karo, /listchats se dekho, /usetarget se select karo."
         )
         return
 
@@ -198,21 +202,69 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 👋 Hey, main attack helper bot hu.
 
 Commands:
-/setlinkchatid <link_or_chatid>  - Target group/chat set karo
-/setcount <number_of_attacks>   - Kitne attacks chahiye
-/startloop                      - Ek single attack
-/autoloop                       - Fixed delay ke sath auto attacks
-/stoploop                       - Auto loop turant band karo
+/addchat <link_or_chatid>        - Target list me add karo
+/listchats                       - Saved chats/IDs number ke sath dekho
+/usetarget <number>              - List me se current target select karo
+/setcount <number_of_attacks>    - Kitne attacks chahiye
+/startloop                       - Ek single attack
+/autoloop                        - Fixed delay ke sath auto attacks
+/stoploop                        - Auto loop turant band karo
 """
     await human_type_and_send(context, update.effective_chat.id, text.strip())
 
 
-async def setlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def addchat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     if not context.args:
-        await update.message.reply_text("Usage: /setlinkchatid <group_link_or_chatid>")
+        await update.message.reply_text("Usage: /addchat <group_link_or_chatid>")
         return
-    chat_targets[update.effective_chat.id] = " ".join(context.args)
-    await human_type_and_send(context, update.effective_chat.id, "✅ Target save kar liya.")
+
+    target = " ".join(context.args).strip()
+    saved_targets.setdefault(chat_id, [])
+
+    if target in saved_targets[chat_id]:
+        await update.message.reply_text("ℹ️ Ye chat/id pehle se list me hai.")
+        return
+
+    saved_targets[chat_id].append(target)
+    await update.message.reply_text(f"✅ Added: `{target}`", parse_mode="Markdown")
+
+
+async def listchats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    lst = saved_targets.get(chat_id, [])
+
+    if not lst:
+        await update.message.reply_text("📭 Abhi koi saved chat/id nahi hai. /addchat use karo.")
+        return
+
+    lines = []
+    for i, t in enumerate(lst, start=1):
+        lines.append(f"{i}. `{t}`")
+    text = "📚 Saved chats/IDs:" + "".join(lines)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def usetarget(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    lst = saved_targets.get(chat_id, [])
+
+    if not lst:
+        await update.message.reply_text("❌ List khaali hai. Pehle /addchat se add karo.")
+        return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /usetarget <number_from_/listchats>")
+        return
+
+    idx = int(context.args[0])
+    if idx < 1 or idx > len(lst):
+        await update.message.reply_text("❌ Galat index. /listchats se sahi number dekho.")
+        return
+
+    target = lst[idx - 1]
+    chat_targets[chat_id] = target
+    await update.message.reply_text(f"🎯 Current target set: `{target}`", parse_mode="Markdown")
 
 
 async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -261,7 +313,9 @@ async def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("setlinkchatid", setlink))
+    app.add_handler(CommandHandler("addchat", addchat))
+    app.add_handler(CommandHandler("listchats", listchats))
+    app.add_handler(CommandHandler("usetarget", usetarget))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("autoloop", autoloop))
