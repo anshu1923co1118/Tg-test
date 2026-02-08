@@ -242,9 +242,7 @@ async def listchats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, t in enumerate(lst, start=1):
         lines.append(f"{i}. {t}")          # backticks hata diye, plain text
 
-    text = "📚 Saved chats/IDs:
-" + "
-".join(lines)
+    text = "📚 Saved chats/IDs:" + "".join(lines)
     await update.message.reply_text(text)
 
 async def usetarget(update: Update, context: ContextTypes.DEFAULT_TYPE):
