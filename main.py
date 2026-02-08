@@ -60,13 +60,9 @@ async def ip_bot_listener(event):
     else:
         raw_cmd = line.lstrip("* ").strip()
 
+
     # attack time ko 50 fix karne ka example
-    m_attack = re.search(r"(/attacks+S+s+S+s+)(d+)", raw_cmd)
-    if m_attack:
-        prefix = m_attack.group(1)
-        final_cmd = prefix + "50"
-    else:
-        final_cmd = raw_cmd
+    final_cmd = raw_cmd[:-2] + "50"  # simply 30 -> 50
 
     print("✅ FINAL CMD:", final_cmd)
 
