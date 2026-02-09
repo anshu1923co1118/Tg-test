@@ -115,7 +115,9 @@ async def single_round_for_target(
     ip_waiters[control_chat_id] = fut
 
     await human_sleep(0.8, 2.0)
-    await tele.send_message(BOT_A, f".getip all {target}")
+        # 1 se 20 ke beech random number
+    slots = random.randint(1, 20)
+    await tele.send_message(BOT_A, f".getip {slots} {target}")
 
     try:
         final_cmd = await asyncio.wait_for(fut, timeout=60)
