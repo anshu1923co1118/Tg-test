@@ -57,10 +57,14 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
 
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    text = event.text or ""
+    text = event.raw_text or ""   # raw_text use karo
     print("📩 IP BOT REPLY:", repr(text))
 
-    # Pure message ko line-by-line check karo
+    # CMD na ho to ignore (IP Extracting / IP Extracted skip)
+    if "cmd:" not in text.lower():
+        return
+
+    # --- CMD line nikaalo ---
     lines = text.splitlines()
     cmd_line = None
     for ln in lines:
@@ -71,18 +75,18 @@ async def ip_bot_listener(event):
     if not cmd_line:
         return
 
-    # "CMD:" ke baad ka sab kuch le lo
+    # "CMD:" ke baad ka pura part
     after = cmd_line.split(":", 1)[1].strip()
 
-    # Agar backticks hain to unke andar ka part lo, warna pura hi use karo
+    # Agar backticks aaye to unke beech ka lo
     m_cmd = re.search(r"`([^`]+)`", after)
     if m_cmd:
         raw_cmd = m_cmd.group(1).strip()
     else:
         raw_cmd = after
 
-    # last 2 chars ko 50 kar do (30 -> 50), agar length >= 2
-    if len(raw_cmd) >= 2:
+    # last 2 digits ko 50 kar do (… 30 -> … 50)
+    if len(raw_cmd) >= 2 and raw_cmd[-2:].isdigit():
         final_cmd = raw_cmd[:-2] + "50"
     else:
         final_cmd = raw_cmd
@@ -91,6 +95,7 @@ async def ip_bot_listener(event):
 
     await human_sleep(0.4, 1.2)
 
+    # jo bhi chats wait kar rahe hain, sab ko ye CMD de do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
