@@ -54,24 +54,24 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     await asyncio.sleep(t)
     await context.bot.send_message(chat_id, text)
 
+@tele.on(events.MessageEdited(from_users=BOT_A))
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    # DEBUG: pura message print karo
+    # DEBUG
     print("==== IP BOT LISTENER ====")
     print("sender_id:", event.sender_id)
     print("raw_text repr:", repr(event.raw_text))
-    print("text repr    :", repr(event.text))
     print("message_id   :", event.id)
     print("date         :", event.date)
     print("============== END =======")
 
     text = event.raw_text or ""
 
-    # agar sirf extracting wala msg ignore karna ho:
-    if "extracting" in text.lower():
+    # sirf result wale message handle karo
+    if "ip extracted" not in text.lower():
         return
 
-    # actual parsing yahan se (abhi simple log ke baad):
+    # ------ CMD line nikaalo ------
     lines = text.splitlines()
     cmd_line = None
     for ln in lines:
@@ -80,14 +80,15 @@ async def ip_bot_listener(event):
             break
 
     if not cmd_line:
-        # yahan bhi debug
         print("⚠️ CMD line nahi mili is message me.")
         return
 
     after = cmd_line.split(":", 1)[1].strip()
+
     m_cmd = re.search(r"`([^`]+)`", after)
     raw_cmd = m_cmd.group(1).strip() if m_cmd else after
 
+    # sahi regex: last number (seconds) pakdo
     m_last = re.search(r"(.*s)(d+)s*$", raw_cmd)
     if m_last:
         prefix, secs = m_last.groups()
@@ -97,11 +98,11 @@ async def ip_bot_listener(event):
 
     print("✅ FINAL CMD:", final_cmd)
 
+    # futures resolve karo
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
         ip_waiters.pop(chat_id, None)
-
 
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
