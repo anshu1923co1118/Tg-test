@@ -57,48 +57,32 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
 @tele.on(events.MessageEdited(from_users=BOT_A))
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    # DEBUG
-    print("==== IP BOT LISTENER ====")
-    print("sender_id:", event.sender_id)
-    print("raw_text repr:", repr(event.raw_text))
-    print("message_id   :", event.id)
-    print("date         :", event.date)
-    print("============== END =======")
+    text = event.text or ""
+    print("📩 IP BOT REPLY:", repr(text))
 
-    text = event.raw_text or ""
-
-    # sirf result wale message handle karo
-    if "ip extracted" not in text.lower():
+    m_line = re.search(r"CMD:(.+)", text, flags=re.IGNORECASE)
+    if not m_line:
         return
 
-    # ------ CMD line nikaalo ------
-    lines = text.splitlines()
-    cmd_line = None
-    for ln in lines:
-        if "cmd:" in ln.lower():
-            cmd_line = ln
-            break
+    line = m_line.group(1).strip()
 
-    if not cmd_line:
-        print("⚠️ CMD line nahi mili is message me.")
-        return
+    m_cmd = re.search(r"`([^`]+)`", line)
+    if m_cmd:
+        raw_cmd = m_cmd.group(1).strip()
+    else:
+        raw_cmd = line.lstrip("* ").strip()
 
-    after = cmd_line.split(":", 1)[1].strip()
-
-    m_cmd = re.search(r"`([^`]+)`", after)
-    raw_cmd = m_cmd.group(1).strip() if m_cmd else after
-
-    # sahi regex: last number (seconds) pakdo
-    m_last = re.search(r"(.*s)(d+)s*$", raw_cmd)
-    if m_last:
-        prefix, secs = m_last.groups()
-        final_cmd = f"{prefix}50"
+    # last 2 chars ko 50 kar do (30 -> 50)
+    if len(raw_cmd) >= 2:
+        final_cmd = raw_cmd[:-2] + "50"
     else:
         final_cmd = raw_cmd
 
     print("✅ FINAL CMD:", final_cmd)
 
-    # futures resolve karo
+    await human_sleep(0.4, 1.2)
+
+    # jo bhyi control chat ip_wait kar raha hai use result do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
