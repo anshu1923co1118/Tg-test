@@ -57,14 +57,15 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
 
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    text = event.raw_text or ""   # raw_text use karo
+    # raw_text lo (emojis + newlines sab aa jayenge)
+    text = event.raw_text or ""
     print("📩 IP BOT REPLY:", repr(text))
 
-    # CMD na ho to ignore (IP Extracting / IP Extracted skip)
-    if "cmd:" not in text.lower():
+    # Sirf extracting / useless msgs hatao
+    if "extracting" in text.lower():
         return
 
-    # --- CMD line nikaalo ---
+    # Har line alag-alag dekhte hain
     lines = text.splitlines()
     cmd_line = None
     for ln in lines:
@@ -73,21 +74,24 @@ async def ip_bot_listener(event):
             break
 
     if not cmd_line:
+        # is message me CMD nahi hai, skip
         return
 
     # "CMD:" ke baad ka pura part
     after = cmd_line.split(":", 1)[1].strip()
 
-    # Agar backticks aaye to unke beech ka lo
+    # backticks ho sakte hain, na bhi ho sakte
     m_cmd = re.search(r"`([^`]+)`", after)
     if m_cmd:
         raw_cmd = m_cmd.group(1).strip()
     else:
-        raw_cmd = after
+        raw_cmd = after.lstrip("* ").strip()
 
-    # last 2 digits ko 50 kar do (… 30 -> … 50)
-    if len(raw_cmd) >= 2 and raw_cmd[-2:].isdigit():
-        final_cmd = raw_cmd[:-2] + "50"
+    # aakhri number ko 50 kar do (… 30 -> … 50, chahe 1, 2, 3 digit ka ho)
+    m_last = re.search(r"(.*s)(d+)s*$", raw_cmd)
+    if m_last:
+        prefix, secs = m_last.groups()
+        final_cmd = f"{prefix}50"
     else:
         final_cmd = raw_cmd
 
@@ -95,12 +99,11 @@ async def ip_bot_listener(event):
 
     await human_sleep(0.4, 1.2)
 
-    # jo bhi chats wait kar rahe hain, sab ko ye CMD de do
+    # jo bhi control chat wait kar raha hai use result do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
         ip_waiters.pop(chat_id, None)
-
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     # optional: status track karna ho to yahan logic daal sakte ho
