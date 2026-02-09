@@ -54,18 +54,24 @@ async def human_type_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     await asyncio.sleep(t)
     await context.bot.send_message(chat_id, text)
 
-
 @tele.on(events.NewMessage(from_users=BOT_A))
 async def ip_bot_listener(event):
-    # raw_text lo (emojis + newlines sab aa jayenge)
-    text = event.raw_text or ""
-    print("📩 IP BOT REPLY:", repr(text))
+    # DEBUG: pura message print karo
+    print("==== IP BOT LISTENER ====")
+    print("sender_id:", event.sender_id)
+    print("raw_text repr:", repr(event.raw_text))
+    print("text repr    :", repr(event.text))
+    print("message_id   :", event.id)
+    print("date         :", event.date)
+    print("============== END =======")
 
-    # Sirf extracting / useless msgs hatao
+    text = event.raw_text or ""
+
+    # agar sirf extracting wala msg ignore karna ho:
     if "extracting" in text.lower():
         return
 
-    # Har line alag-alag dekhte hain
+    # actual parsing yahan se (abhi simple log ke baad):
     lines = text.splitlines()
     cmd_line = None
     for ln in lines:
@@ -74,20 +80,14 @@ async def ip_bot_listener(event):
             break
 
     if not cmd_line:
-        # is message me CMD nahi hai, skip
+        # yahan bhi debug
+        print("⚠️ CMD line nahi mili is message me.")
         return
 
-    # "CMD:" ke baad ka pura part
     after = cmd_line.split(":", 1)[1].strip()
-
-    # backticks ho sakte hain, na bhi ho sakte
     m_cmd = re.search(r"`([^`]+)`", after)
-    if m_cmd:
-        raw_cmd = m_cmd.group(1).strip()
-    else:
-        raw_cmd = after.lstrip("* ").strip()
+    raw_cmd = m_cmd.group(1).strip() if m_cmd else after
 
-    # aakhri number ko 50 kar do (… 30 -> … 50, chahe 1, 2, 3 digit ka ho)
     m_last = re.search(r"(.*s)(d+)s*$", raw_cmd)
     if m_last:
         prefix, secs = m_last.groups()
@@ -97,13 +97,12 @@ async def ip_bot_listener(event):
 
     print("✅ FINAL CMD:", final_cmd)
 
-    await human_sleep(0.4, 1.2)
-
-    # jo bhi control chat wait kar raha hai use result do
     for chat_id, fut in list(ip_waiters.items()):
         if not fut.done():
             fut.set_result(final_cmd)
         ip_waiters.pop(chat_id, None)
+
+
 @tele.on(events.NewMessage(from_users=BOT_B))
 async def bot_b_listener(event):
     # optional: status track karna ho to yahan logic daal sakte ho
