@@ -26,9 +26,14 @@ BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
 BOT_A = "@botbysahilbot"          # IP BOT
 BOT_B = "@DDOS_Aditya_xd_bot"     # Attack BOT
 
-tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
-tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
-STRING_SESSION = "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PNWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NOOBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
+STRING_SESSION = (
+    "1BVtsOKEBuwrK8qxvmy15Glw3WMpdO6sLWyYPWJrT_srehGTLqvYQ-h79-"
+    "TY6GRqf9JfkAHjjzeN2HK-EWRJBlZnep2DpbOSNaqnDGQr3vjlGK9HY42PN"
+    "NWQWopuw-NKZcFYkQkL5aTNmhLw9oIgj0Yv1dCxEVIsK1RlDz8MeV3gw3NO"
+    "OBO_ugSSiNwQWm9p-LLxDNirZrGBHsPu6ldDZx3ugqYbjqq1lZqBX30-VA_"
+    "iPxbe-tCfHAJYAuKFsgH17iB-Q5f4HsKYQWGqx2ifgnDXsZhbtlfj7SkU16"
+    "c4GJzicV9fuKMcJLhjbC2Gt48chDdtShhyBilakU0beFCt4EhgyAxccsPUI="
+)
 
 tele = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
@@ -40,7 +45,7 @@ chat_counts: Dict[int, int] = {}             # autoloop count
 
 ip_waiters: Dict[int, asyncio.Future] = {}   # IP BOT reply wait
 auto_tasks: Dict[int, asyncio.Task] = {}     # autoloop task per chat
-BASE_DELAY = 70                               # fixed delay (s) autoloop ke liye
+BASE_DELAY = 65                             # fixed delay (s) autoloop ke liye
 
 
 # ===== HELPERS =====
