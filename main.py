@@ -370,11 +370,20 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ===== MAIN =====
+
 async def main():
+    # Telethon ko start karo (but run_until_disconnected mat use karo)
     await tele.start()
     print("🧵 Telethon connected")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application
+        .builder()
+        .token(BOT_TOKEN)
+        .concurrent_updates(True)   # optional, par helpful
+        .build()
+    )
+
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("addchat", addchat))
     app.add_handler(CommandHandler("listchats", listchats))
@@ -385,12 +394,12 @@ async def main():
     app.add_handler(CallbackQueryHandler(on_list_callback))
 
     print("🤖 Control bot running")
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
 
-    # Telethon loop
-    await tele.run_until_disconnected()
+    # yahi call event loop ko chala ke rakhega
+    await app.run_polling(close_loop=False)
+
+    # agar kabhi bot band karna ho to Telethon disconnect karo
+    await tele.disconnect()
 
 
 if __name__ == "__main__":
