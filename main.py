@@ -21,8 +21,7 @@ from telegram.ext import (
 # ===== TELETHON + BOT CONFIG (tumhare values) =====
 API_ID = 35284354
 API_HASH = "1369f6f5653d5589b735def06a23703c"
-BOT_TOKEN = "8489391478:AAFn0e-HJplScgnrZ5YH0f2Gc8Q1KO9VeyQ"
-
+BOT_TOKEN = "8383221361:AAGAlQPK0kPNBj5gmA4VplWZDOr5k9J6JXA"
 BOT_A = "@IpbotAditya_bot"          # IP BOT
 BOT_B = "@CLOWN_BINARY_BOT"     # Attack BOT
 
